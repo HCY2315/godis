@@ -1,3 +1,5 @@
+package redis
+
 /*
  * Connection —— 命名含义：与一个 redis 客户端之间的“连接”。
  * 用途：命令处理过程中，凡是“属于这条连接”的状态都挂在这里：
@@ -16,51 +18,43 @@ type Connection interface {
 	RemoteAddr() string
 
 	// —— 认证相关 ——
-	// SetPassword/GetPassword：AUTH 所需的密码，运行时可能被 CONFIG 改动所以存在连接上
-
-	// —— 发布订阅 ——
-	// Subscribe/UnSubscribe/SubsCount/GetChannels：该连接订阅了哪些频道
-
-	// —— 事务(MULTI/EXEC/WATCH) ——
-	// InMultiState/SetMultiState：是否处于 MULTI 队列中；
-	// GetQueuedCmdLine/EnqueueCmd/ClearQueuedCmds：队列中的命令；
-	// GetWatching：WATCH 的键及版本号；AddTxError/GetTxErrors：入队期间的语法错误
-
-	// —— 选库 ——
-	// GetDBIndex/SelectDB：当前选中第几号库
-
-	// —— 主从角色 ——
-	// SetSlave/IsSlave、SetMaster/IsMaster：标记这条连接的对端是 slave/master
-
-	// Name 连接名（默认用远程地址）
-	Name() string
-
+	// AUTH 所需的密码，运行时可能被 CONFIG 改动所以存在连接上
 	SetPassword(string)
 	GetPassword() string
 
-	// client should keep its subscribing channels
+	// —— 发布订阅 ——
+	// 该连接订阅了哪些频道（client should keep its subscribing channels）
 	Subscribe(channel string)
 	UnSubscribe(channel string)
 	SubsCount() int
 	GetChannels() []string
 
+	// —— 事务(MULTI/EXEC/WATCH) ——
+	// InMultiState/SetMultiState：是否处于 MULTI 队列中
 	InMultiState() bool
 	SetMultiState(bool)
+	// 队列中的命令及清空
 	GetQueuedCmdLine() [][][]byte
 	EnqueueCmd([][]byte)
 	ClearQueuedCmds()
+	// WATCH 的键及版本号
 	GetWatching() map[string]uint32
+	// 入队期间的语法错误
 	AddTxError(err error)
 	GetTxErrors() []error
 
+	// —— 选库 ——
+	// 当前选中第几号库
 	GetDBIndex() int
 	SelectDB(int)
 
+	// —— 主从角色 ——
+	// 标记这条连接的对端是 slave/master
 	SetSlave()
 	IsSlave() bool
-
 	SetMaster()
 	IsMaster() bool
 
+	// Name 连接名（默认用远程地址）
 	Name() string
 }

@@ -1,3 +1,11 @@
+/*
+ * 程序入口：启动流程总览
+ *   1) 初始化日志
+ *   2) 读取配置（环境变量 CONFIG > 工作目录下的 redis.conf > 内置默认值）
+ *   3) 构造存储引擎 db（集群 cluster 或 单机 database.Server）
+ *   4) 选择网络层（gnet 事件驱动模型 或 std 协程模型）并开始监听
+ * 阶段定位：本文件只负责“启动阶段”，请求的真正处理在 redis/server 与 database 中。
+ */
 package main
 
 import (
@@ -22,6 +30,8 @@ var banner = `
 \____/\____/\__,_/_/____/
 `
 
+// defaultProperties —— 命名含义：内置默认配置。
+// 用途：当没有配置文件时使用（注意端口是 6399，不是 redis 的 6379）。
 var defaultProperties = &config.ServerProperties{
 	Bind:           "0.0.0.0",
 	Port:           6399,
@@ -38,12 +48,14 @@ func fileExists(filename string) bool {
 
 func main() {
 	print(banner)
+	// 【阶段1】初始化日志：输出到 logs/godis-YYYY-MM-DD.log
 	logger.Setup(&logger.Settings{
 		Path:       "logs",
 		Name:       "godis",
 		Ext:        "log",
 		TimeFormat: "2006-01-02",
 	})
+	// 【阶段2】读取配置：优先级 CONFIG 环境变量 > ./redis.conf > 内置默认值
 	configFilename := os.Getenv("CONFIG")
 	if configFilename == "" {
 		if fileExists("redis.conf") {
@@ -55,7 +67,8 @@ func main() {
 		config.SetupConfig(configFilename)
 	}
 	listenAddr := fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port)
-	
+
+	// 【阶段3+4】构造存储引擎并选择网络层
 	var err error
 	if config.Properties.UseGnet {
 		var db idatabase.DB
