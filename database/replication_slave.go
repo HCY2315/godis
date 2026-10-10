@@ -1,3 +1,12 @@
+/*
+ * 主从复制——从节点(slave)视角。
+ * 阶段定位：复制阶段。slave 执行 SLAVEOF host port 后：连接 master → 发 PSYNC →
+ * 全量/增量同步 → 持续接收命令流并重放，从而与 master 保持一致。
+ * 命名说明：
+ *   slaveStatus —— 从节点的复制状态（master 地址、连接、offset、ctx 等）
+ *   masterRole / slaveRole —— 本节点角色
+ *   configChangedErr —— 配置被修改时用于中止正在进行的同步过程
+ */
 package database
 
 import (
@@ -25,38 +34,43 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
+// 本节点角色
 const (
 	masterRole = iota
 	slaveRole
 )
 
+// slaveStatus —— 命名含义：从节点复制状态。
 type slaveStatus struct {
 	mutex  sync.Mutex
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// configVersion stands for the version of slaveStatus config. Any change of master host/port will cause configVersion increment
-	// If configVersion change has been found during slaveStatus current slaveStatus procedure will stop.
-	// It is designed to abort a running slaveStatus procedure
+	// configVersion 记录配置版本：master 地址一变就自增，
+	// 正在跑的同步流程发现版本变化就中止，从而支持“切换 master”。
 	configVersion int32
 
-	masterHost string
+	masterHost string // master 地址
 	masterPort int
 
-	masterConn   net.Conn
-	masterChan   <-chan *parser.Payload
-	replId       string
-	replOffset   int64
-	lastRecvTime time.Time
-	running      sync.WaitGroup
+	masterConn   net.Conn               // 与 master 的连接
+	masterChan   <-chan *parser.Payload // 从 master 收到的命令流
+	replId       string                 // master 的复制 ID
+	replOffset   int64                  // 已同步偏移量
+	lastRecvTime time.Time              // 最近接收时间
+	running      sync.WaitGroup         // 同步过程中的并发任务
 }
 
+// configChangedErr —— 配置变更导致同步中止的错误标记。
 var configChangedErr = errors.New("slaveStatus config changed")
 
+// initReplSlaveStatus —— 用途：初始化空的从节点状态。
 func initReplSlaveStatus() *slaveStatus {
 	return &slaveStatus{}
 }
 
+// execSlaveOf —— 用途：处理 SLAVEOF 命令。SLAVEOF no one 取消主从；否则记录，
+// 切换角色为 slave，并在后台启动 setrMaster 建立复制。
 func (server *Server) execSlaveOf(c redis.Connection, args [][]byte) redis.Reply {
 	if strings.ToLower(string(args[0])) == "no" &&
 		strings.ToLower(string(args[1])) == "one" {
@@ -78,6 +92,7 @@ func (server *Server) execSlaveOf(c redis.Connection, args [][]byte) redis.Reply
 	return protocol.MakeOkReply()
 }
 
+// slaveOfNone —— 用途：取消主从关系，清空 master 信息并恢复为 master 角色。
 func (server *Server) slaveOfNone() {
 	server.slaveStatus.mutex.Lock()
 	defer server.slaveStatus.mutex.Unlock()
