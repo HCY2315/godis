@@ -1,10 +1,11 @@
+// simple.go：非并发字典。用于 hash 字段、AOF 重写临时表等不需要并发保护的场景。
 package dict
 
 import (
 	"github.com/hdt3213/godis/lib/wildcard"
 )
 
-// SimpleDict wraps a map, it is not thread safe
+// SimpleDict —— 命名含义：简单字典，就是对原生 map 的包装，非线程安全（性能更好）。
 type SimpleDict struct {
 	m map[string]interface{}
 }

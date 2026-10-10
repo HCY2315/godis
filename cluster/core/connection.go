@@ -26,8 +26,8 @@ import (
 
 // ConnectionFactory —— 命名含义：集群节点间连接的工厂。
 type ConnectionFactory interface {
-	BorrowPeerClient(peerAddr string) (peerClient, error) // 借出一个到对端的客户端
-	ReturnPeerClient(peerClient peerClient) error          // 归还（连接池复用）
+	BorrowPeerClient(peerAddr string) (peerClient, error)           // 借出一个到对端的客户端
+	ReturnPeerClient(peerClient peerClient) error                   // 归还（连接池复用）
 	NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error) // 建立流式连接
 	Close() error
 }
@@ -185,4 +185,3 @@ func (factory *defaultClientFactory) Close() error {
 	})
 	return nil
 }
-

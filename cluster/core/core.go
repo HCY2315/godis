@@ -26,15 +26,15 @@ import (
 
 // Cluster —— 命名含义：集群节点。
 type Cluster struct {
-	raftNode    *raft.Node     // raft 一致性节点
+	raftNode    *raft.Node        // raft 一致性节点
 	db          database.DBEngine // 本地存储引擎（单机 Server）
 	connections ConnectionFactory // 节点间连接的工厂
 	config      *Config
 
-	slotsManager    *slotsManager      // slot 分配
-	rebalanceManger *rebalanceManager  // 迁移/均衡
+	slotsManager    *slotsManager       // slot 分配
+	rebalanceManger *rebalanceManager   // 迁移/均衡
 	transactions    *TransactionManager // 分布式事务
-	replicaManager  *replicaManager    // 副本管理
+	replicaManager  *replicaManager     // 副本管理
 
 	closeChan chan struct{}
 
@@ -50,9 +50,9 @@ type Cluster struct {
 // Config —— 命名含义：集群启动配置（内嵌 raft 配置 + 加入集群相关参数）。
 type Config struct {
 	raft.RaftConfig
-	StartAsSeed    bool   // 是否作为种子引导新集群
-	JoinAddress    string // 加入集群时联系的seed地址
-	Master         string // 以副本身份加入时指向的主节点
+	StartAsSeed    bool              // 是否作为种子引导新集群
+	JoinAddress    string            // 加入集群时联系的seed地址
+	Master         string            // 以副本身份加入时指向的主节点
 	connectionStub ConnectionFactory // 测试用
 	noCron         bool              // 测试用：不启动后台定时任务
 }

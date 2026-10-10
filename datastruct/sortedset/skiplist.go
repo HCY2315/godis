@@ -1,3 +1,6 @@
+// skiplist.go：跳表实现，ZSET 的底层结构。
+// 跳表 = 有序链表 + 多级索引，能以 O(log n) 完成插入/删除/按排名查询，
+// 且实现比平衡树简单，是 Redis ZSET 的同款选择。
 package sortedset
 
 import (
@@ -9,24 +12,26 @@ const (
 	maxLevel = 16
 )
 
-// Element is a key-score pair
+// Element —— 命名含义：跳表元素，即“成员 member + 分值 score”对。
 type Element struct {
 	Member string
 	Score  float64
 }
 
-// Level aspect of a node
+// Level —— 命名含义：节点的一层索引。
 type Level struct {
-	forward *node // forward node has greater score
-	span    int64
+	forward *node // 指向同层下一个节点（score 更大）
+	span    int64 // 跨度，用于按排名查询
 }
 
+// node —— 命名含义：跳表节点（内部类型）。
 type node struct {
 	Element
-	backward *node
-	level    []*Level // level[0] is base level
+	backward *node    // 后退指针
+	level    []*Level // level[0] 是最底层
 }
 
+// skiplist —— 命名含义：跳表本体。
 type skiplist struct {
 	header *node
 	tail   *node

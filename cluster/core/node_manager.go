@@ -21,7 +21,7 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-/* 
+/*
 
 **Rebalance Procedure**
 1. Invoke `triggerMigrationTask` on cluster Leader to start a migration task

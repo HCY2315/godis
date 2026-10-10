@@ -26,9 +26,9 @@ import (
 // Node —— 命名含义：本节点的 raft 实例及配套设施（日志、快照、传输、状态机）。
 type Node struct {
 	Cfg           *RaftConfig
-	inner         *raft.Raft     // hashicorp/raft 实例
-	FSM           *FSM           // 状态机
-	logStore      raft.LogStore  // 日志存储（boltdb）
+	inner         *raft.Raft    // hashicorp/raft 实例
+	FSM           *FSM          // 状态机
+	logStore      raft.LogStore // 日志存储（boltdb）
 	stableStore   raft.StableStore
 	snapshotStore raft.SnapshotStore
 	transport     raft.Transport
