@@ -1,3 +1,4 @@
+// pubsub.go：SUBSCRIBE/UNSUBSCRIBE/PUBLISH 的具体实现，直接拼 RESP 消息推送。
 package pubsub
 
 import (

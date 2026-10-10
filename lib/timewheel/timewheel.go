@@ -1,3 +1,10 @@
+/*
+ * 时间轮：高效管理大量“延迟任务/定时任务”的经典结构。
+ * 用途：godis 用它实现 key 过期——每个键到期时在时间轮里注册一个回调。
+ * 原理：把时间划分成若干槽(slot)，指针随时间推进，到期就触发该槽里的任务，
+ * 比“为每个键起一个 timer”更省资源。
+ * 命名说明：TimeWheel 时间轮，task 一个延迟任务，location 任务在轮中的位置。
+ */
 package timewheel
 
 import (
@@ -7,12 +14,13 @@ import (
 	"time"
 )
 
+// location —— 命名含义：任务在时间轮中的位置（哪个槽、对应哪个链表元素）。
 type location struct {
 	slot  int
 	etask *list.Element
 }
 
-// TimeWheel can execute jobs after a given delay
+// TimeWheel —— 命名含义：时间轮。
 type TimeWheel struct {
 	interval time.Duration
 	ticker   *time.Ticker

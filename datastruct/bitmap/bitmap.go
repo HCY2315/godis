@@ -1,7 +1,11 @@
+// bitmap.go：位图。用 []byte 存比特，支持 SETBIT/GETBIT/BITCOUNT 等命令。
+// 命名含义：BitMap，每一位代表一个 0/1 状态，极其节省空间。
 package bitmap
 
+// BitMap —— 命名含义：位图，底层是一个字节切片。
 type BitMap []byte
 
+// New —— 用途：创建空位图。
 func New() *BitMap {
 	b := BitMap(make([]byte, 0))
 	return &b

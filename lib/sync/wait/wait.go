@@ -1,3 +1,6 @@
+// wait.go：带超时的 WaitGroup。
+// 用途：连接关闭时等待“正在发送的数据”发完（见 connection.Connection.sendingData），
+// 避免客户端收到半截响应。相比标准 WaitGroup 多了 WaitWithTimeout。
 package wait
 
 import (
@@ -5,7 +8,7 @@ import (
 	"time"
 )
 
-// Wait is similar with sync.WaitGroup which can wait with timeout
+// Wait —— 命名含义：可超时等待的计数器（包装 sync.WaitGroup）。
 type Wait struct {
 	wg sync.WaitGroup
 }

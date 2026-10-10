@@ -1,3 +1,6 @@
+// pool.go：通用对象池（带最大空闲/最大活跃限制）。
+// 用途：集群节点间、主从之间的连接复用，避免频繁建立 TCP 连接。
+// 命名说明：Pool 池，factory 创建对象的函数，finalizer 销毁对象的函数。
 package pool
 
 import (
@@ -10,14 +13,16 @@ var (
 	ErrMax    = errors.New("reach max connection limit")
 )
 
+// request —— 命名含义：等待从池中取对象的请求。
 type request chan interface{}
 
+// Config —— 命名含义：池的容量配置。
 type Config struct {
-	MaxIdle   uint
-	MaxActive uint
+	MaxIdle   uint // 最大空闲对象数
+	MaxActive uint // 最大活跃对象数
 }
 
-// Pool stores object for reusing, such as redis connection
+// Pool —— 命名含义：对象池，复用如 redis 连接等资源。
 type Pool struct {
 	Config
 	factory     func() (interface{}, error)

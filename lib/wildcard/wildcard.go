@@ -1,3 +1,5 @@
+// wildcard.go：通配符匹配。把 glob 风格的模式（* ? [] 等）翻译成正则，
+// 用于 KEYS/SCAN 的模式匹配。
 package wildcard
 
 import (
@@ -6,7 +8,7 @@ import (
 	"strings"
 )
 
-// Pattern represents a wildcard pattern
+// Pattern —— 命名含义：通配符模式（内部持有一个编译好的正则）。
 type Pattern struct {
 	exp *regexp.Regexp
 }
