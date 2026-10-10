@@ -95,19 +95,18 @@ func (backlog *replBacklog) isValidOffset(offset int64) bool {
 // masterStatus —— 命名含义：master 的复制状态总集。
 type masterStatus struct {
 	mu           sync.RWMutex
-	replId       string                              // 复制 ID（每次全量同步会变化）
-	backlog      *replBacklog                        // 复制积压缓冲
-	slaveMap     map[redis.Connection]*slaveClient   // 连接 -> slave 状态
-	waitSlaves   map[*slaveClient]struct{}           // 等待 RDB 生成完的 slave
-	onlineSlaves map[*slaveClient]struct{}           // 已在线、正在接收命令流的 slave
-	bgSaveState  uint8                               // RDB 后台生成状态
-	rdbFilename  string                              // 用于复制的临时 RDB 文件名
-	aofListener  *replAofListener                    // 把写命令同步到 backlog / slave 的监听器
-	rewriting    atomic.Boolean                      // 是否正在重写
+	replId       string                            // 复制 ID（每次全量同步会变化）
+	backlog      *replBacklog                      // 复制积压缓冲
+	slaveMap     map[redis.Connection]*slaveClient // 连接 -> slave 状态
+	waitSlaves   map[*slaveClient]struct{}         // 等待 RDB 生成完的 slave
+	onlineSlaves map[*slaveClient]struct{}         // 已在线、正在接收命令流的 slave
+	bgSaveState  uint8                             // RDB 后台生成状态
+	rdbFilename  string                            // 用于复制的临时 RDB 文件名
+	aofListener  *replAofListener                  // 把写命令同步到 backlog / slave 的监听器
+	rewriting    atomic.Boolean                    // 是否正在重写
 }
 
 // bgSaveForReplication —— 用途：后台生成 RDB 并发送给等待中的 slave（不阻塞主线程）。
-func (server *Server) bgSaveForReplication() {
 func (server *Server) bgSaveForReplication() {
 	go func() {
 		defer func() {
