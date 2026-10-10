@@ -100,19 +100,24 @@ func NewStandaloneServer() *Server {
 	return server
 }
 
-// Exec executes command
-// parameter `cmdLine` contains command and its arguments, for example: "set key value"
+// Exec —— 命名含义：执行命令（interface/database.DB 的核心方法）。
+// 用途：网络层解析出 cmdLine 后调用；本函数先处理一批“特殊命令”，
+// 其余普通命令下派到对应 DB 的 execNormalCommand。
+// 阶段定位：解析之后的“执行阶段”总入口。
+// 注意：GodisExecCommandStartUnixTime 每次命令都取时间戳用于慢日志，是固定开销之一。
 func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
+	// 兜底 recover：任何命令 panic 都转成 UnknownErrReply，避免拖垮整个服务
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
 			result = &protocol.UnknownErrReply{}
 		}
 	}()
-	// Record the start time of command execution
+	// 记录命令开始时间（用于慢日志）
 	GodisExecCommandStartUnixTime := time.Now()
 
 	cmdName := strings.ToLower(string(cmdLine[0]))
+	// —— 特殊命令优先处理：这些命令不走普通 DB 执行路径 ——
 	// ping
 	if cmdName == "ping" {
 		return Ping(c, cmdLine[1:])
@@ -213,7 +218,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 	// todo: support multi database transaction
 
-	// normal commands
+	// —— 普通命令：下派到连接当前选中的库执行 ——
 	dbIndex := c.GetDBIndex()
 	selectedDB, errReply := server.selectDB(dbIndex)
 	if errReply != nil {
@@ -221,7 +226,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 
 	exec := selectedDB.Exec(c, cmdLine)
-	// Record slow query logs
+	// 记录慢查询日志供 SLOWLOG 查看
 	server.slogLogger.Record(GodisExecCommandStartUnixTime, cmdLine, c.Name())
 	return exec
 }
