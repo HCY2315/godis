@@ -1,3 +1,13 @@
+/*
+ * 集群元数据状态机（FSM）。
+ * 用途：保存所有节点一致认同的“集群地图”，包括：
+ *   - 哪个节点负责哪些 slot（路由的依据）
+ *   - 正在进行的迁移任务
+ *   - 主从关系、故障转移任务
+ * 这些数据通过 raft 日志在各节点间复制；Apply() 在每个节点上重放同样的日志，
+ * 从而保证所有节点看到相同的集群拓扑。
+ * 迁移期间的请求路由规则见下方英文注释（指向迁移中 slot 的请求会被路由到源节点）。
+ */
 package raft
 
 import (
@@ -8,25 +18,19 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-// FSM implements raft.FSM
-// It stores node-slots mapping to providing routing service
-//
-// A request pointing to a migrating slot will be routed to source node.
-// After the command being executed, the updates will be relayed to the target node
-//
-// If the target node crashes during migrating, the migration will be canceled.
-// All related commands will be routed to the source node
+// FSM —— 命名含义：有限状态机（这里存集群元数据）。
 type FSM struct {
 	mu           sync.RWMutex
-	Node2Slot    map[string][]uint32       // nodeID -> slotIDs, slotIDs is in ascending order and distinct
-	Slot2Node    map[uint32]string         // slotID -> nodeID
-	Migratings   map[string]*MigratingTask // taskId -> task
-	MasterSlaves map[string]*MasterSlave   // masterId -> MasterSlave
+	Node2Slot    map[string][]uint32       // 节点 -> 它负责的 slot 列表
+	Slot2Node    map[uint32]string         // slot -> 负责节点（路由核心表）
+	Migratings   map[string]*MigratingTask // taskId -> 迁移任务
+	MasterSlaves map[string]*MasterSlave   // masterId -> 主从关系
 	SlaveMasters map[string]string         // slaveId -> masterId
-	Failovers    map[string]*FailoverTask  // taskId -> task
-	changed      func(*FSM)                // called while fsm changed, within readlock
+	Failovers    map[string]*FailoverTask  // taskId -> 故障转移任务
+	changed      func(*FSM)                // 状态变化回调（持读锁时调用）
 }
 
+// MasterSlave —— 命名含义：一个主节点及其从节点列表。
 type MasterSlave struct {
 	MasterId string
 	Slaves   []string

@@ -1,3 +1,13 @@
+/*
+ * Raft 一致性协议封装（基于 hashicorp/raft）。
+ * 阶段定位：集群的“元数据一致性阶段”。集群不复制用户数据，只用 raft 复制“元数据”：
+ * slot 归属、节点列表、迁移事件等，保证所有节点对集群拓扑达成一致。
+ * 命名说明：
+ *   Node      —— 本节点上的 raft 实例
+ *   FSM       —— 状态机（Finite State Machine），即“元数据的当前状态 + 变更应用逻辑”
+ *   watcher   —— 监听 leader 变化以触发故障转移
+ *   RaftConfig—— raft 运行配置
+ */
 package raft
 
 import (
@@ -13,25 +23,28 @@ import (
 	raftboltdb "github.com/hashicorp/raft-boltdb"
 )
 
+// Node —— 命名含义：本节点的 raft 实例及配套设施（日志、快照、传输、状态机）。
 type Node struct {
 	Cfg           *RaftConfig
-	inner         *raft.Raft
-	FSM           *FSM
-	logStore      raft.LogStore
+	inner         *raft.Raft     // hashicorp/raft 实例
+	FSM           *FSM           // 状态机
+	logStore      raft.LogStore  // 日志存储（boltdb）
 	stableStore   raft.StableStore
 	snapshotStore raft.SnapshotStore
 	transport     raft.Transport
 	watcher       watcher
 }
 
+// watcher —— 命名含义：leader 观察者，用于主节点故障时触发 failover。
 type watcher struct {
 	watch         func(*FSM)
 	currentMaster string
 	onFailover    func(newMaster string)
 }
 
+// RaftConfig —— 命名含义：raft 配置。
 type RaftConfig struct {
-	RedisAdvertiseAddr string // it also be used as node id,
+	RedisAdvertiseAddr string // 同时用作节点 ID
 	RaftListenAddr     string
 	RaftAdvertiseAddr  string
 	Dir                string

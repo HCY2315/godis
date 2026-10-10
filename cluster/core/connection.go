@@ -1,3 +1,11 @@
+/*
+ * 集群节点间的连接管理。
+ * 阶段定位：集群命令执行阶段的“转发”环节——本地节点把命令发给对端节点时用到。
+ * 命名说明：
+ *   ConnectionFactory —— 连接工厂，负责借出/归还到对端节点的客户端，以及建立流式连接
+ *   peerClient        —— 到某个对端节点的同步请求客户端（一条命令一个响应）
+ *   peerStream        —— 到对端节点的流式连接（持续接收命令流，如迁移/订阅）
+ */
 package core
 
 import (
@@ -16,20 +24,21 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-// ConnectionFactory manages connection with peer nodes in cluster
+// ConnectionFactory —— 命名含义：集群节点间连接的工厂。
 type ConnectionFactory interface {
-	BorrowPeerClient(peerAddr string) (peerClient, error)
-	ReturnPeerClient(peerClient peerClient) error
-	NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error)
+	BorrowPeerClient(peerAddr string) (peerClient, error) // 借出一个到对端的客户端
+	ReturnPeerClient(peerClient peerClient) error          // 归还（连接池复用）
+	NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error) // 建立流式连接
 	Close() error
 }
 
-// peerClient represents a
+// peerClient —— 命名含义：到对端节点的一个同步请求客户端。
 type peerClient interface {
 	RemoteAddress() string
 	Send(args [][]byte) redis.Reply
 }
 
+// peerStream —— 命名含义：到对端节点的流式连接。
 type peerStream interface {
 	Stream() <-chan *parser.Payload
 	Close() error

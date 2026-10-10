@@ -1,3 +1,10 @@
+/*
+ * 集群节点管理与 slot 迁移（rebalance）。
+ * 阶段定位：集群的“运维/迁移阶段”，不参与普通命令路径。
+ * 该文件负责两个核心能力：
+ *   1) 维护“slot -> 节点”的映射（slotsManager），供命令路由查询；
+ *   2) 在节点间迁移 slot（rebalanceManager），下面大段注释就是迁移的完整流程。
+ */
 package core
 
 import (
