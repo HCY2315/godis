@@ -1,3 +1,10 @@
+/*
+ * 协议解析器（通用版，基于 io.Reader + channel）。
+ * 阶段定位：解析阶段。把网络字节流解析成 redis.Reply。
+ * 使用方：std 网络层、AOF 加载、集群、主从复制（凡是有 io.Reader 的地方都用它）。
+ * 对比：gnet 版用另一个同目录的 parser.ParseV2（基于缓冲的同步解析）。
+ * 命名：Payload 表示“一次解析的产出”，可能是 Data（成功）也可能是 Err（失败）。
+ */
 package parser
 
 import (
@@ -14,13 +21,15 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-// Payload stores redis.Reply or error
+// Payload —— 命名含义：一次解析的载荷。Data 为成功的回复，Err 为解析错误（二选一）。
 type Payload struct {
 	Data redis.Reply
 	Err  error
 }
 
-// ParseStream reads data from io.Reader and send payloads through channel
+// ParseStream —— 用途：从 reader 持续解析，结果通过 channel 送出。
+// 内部起一个 goroutine 跑 parse0，调用方用 for range 消费。
+// 这是 std 版“解析与执行在不同 goroutine 协作”的体现。
 func ParseStream(reader io.Reader) <-chan *Payload {
 	ch := make(chan *Payload)
 	go parse0(reader, ch)
@@ -60,14 +69,17 @@ func ParseOne(data []byte) (redis.Reply, error) {
 	return payload.Data, payload.Err
 }
 
+// parse0 —— 核心解析循环。先按行读到 '\n'，看首字节判断 RESP 类型再分支解析。
 func parse0(rawReader io.Reader, ch chan<- *Payload) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Error(err, string(debug.Stack()))
 		}
 	}()
+	// 用 bufio 包一层，减少底层读次数
 	reader := bufio.NewReader(rawReader)
 	for {
+		// 读到行尾（含 '\n'）
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			ch <- &Payload{Err: err}
@@ -81,6 +93,7 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 			continue
 		}
 		line = bytes.TrimSuffix(line, []byte{'\r', '\n'})
+		// 按 RESP 首字节分派：+ 状态 / - 错误 / : 整数 / $ 批量串 / * 数组
 		switch line[0] {
 		case '+':
 			content := string(line[1:])

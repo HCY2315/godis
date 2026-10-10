@@ -1,3 +1,9 @@
+/*
+ * 协议解析器（v2，基于缓冲的同步解析）。
+ * 阶段定位：解析阶段，供 gnet 网络层在 OnTraffic 回调中使用。
+ * 与 parser.go 的区别：这里同步返回 [][]byte，不走 channel、不额外起 goroutine，
+ * 更适合事件回调模型。注意本实现逐字节 io.ReadFull 读取，是后续零拷贝优化的对象。
+ */
 package parser
 
 import (
@@ -7,6 +13,8 @@ import (
 	"strings"
 )
 
+// ParseV2 —— 用途：解析一条命令，返回其参数列表（cmdLine）。
+// 支持两套协议：以 '*' 开头的 RESP 数组协议，以及纯文本命令（如 "PING\r\n"）。
 func ParseV2(r io.Reader) ([][]byte, error) {
 	// 读取起始字符 '*'
 	buf := make([]byte, 1)
