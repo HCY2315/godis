@@ -1,3 +1,4 @@
+// del.go：集群版 DEL。多个 key 可能在不同节点，需按节点分发统计删除数量。
 package commands
 
 import (

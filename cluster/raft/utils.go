@@ -1,3 +1,4 @@
+// utils.go：raft Node 的便捷访问方法（自身 ID、状态、已提交位置等）。
 package raft
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/hashicorp/raft"
 )
 
+// Self —— 用途：返回本节点 ID。
 func (node *Node) Self() string {
 	return node.Cfg.ID()
 }

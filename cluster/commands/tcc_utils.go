@@ -1,3 +1,4 @@
+// tcc_utils.go：多键命令在集群里的“按节点分组”工具，供 TCC 分布式事务使用。
 package commands
 
 import (
@@ -7,9 +8,10 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
+// CmdLine —— 命令行别名。
 type CmdLine = [][]byte
 
-// node -> keys on the node
+// RouteMap —— 命名含义：路由表，节点 -> 该节点上需要处理的 key 列表。
 type RouteMap map[string][]string
 
 func getRouteMap(cluster *core.Cluster, keys []string) RouteMap {

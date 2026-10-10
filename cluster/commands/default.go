@@ -1,7 +1,14 @@
+/*
+ * 集群命令注册：把单键命令批量注册为“默认路由”。
+ * 命名规律：本包里的命令分两类——
+ *   名字带下划线后缀(如 mset_) 的是“本地执行版”，只在真正负责该 key 的节点上运行；
+ *   不带后缀的(如 mset) 是对外命令，负责在集群内做路由/分发。
+ */
 package commands
 
 import "github.com/hdt3213/godis/cluster/core"
 
+// init —— 用途：把一批单键命令统一注册为默认路由函数（按 key 找节点）。
 func init() {
 	defaultCmds := []string{
 		"expire",

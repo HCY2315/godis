@@ -1,4 +1,4 @@
-// fsm_utils.go：状态机(FSM)的只读查询与辅助方法，供路由、迁移逻辑读取集群地图。
+// fsm_utils.go：状态机(FSM)的查询工具方法（供路由查询 slot 归属、节点信息等）。
 package raft
 
 import (

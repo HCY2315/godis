@@ -1,3 +1,5 @@
+// rename.go：集群版 RENAME/RENAMENX。
+// 难点：源 key 和目标 key 可能落在不同节点，需要跨节点协调 + 加锁，故不能用默认路由。
 package commands
 
 import (

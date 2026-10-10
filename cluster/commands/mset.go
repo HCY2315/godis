@@ -1,3 +1,5 @@
+// mset.go：集群版 MSET/MGET/MSETNX。
+// 难点：多个 key 可能分散在不同节点，需要按节点分组并借助 TCC 分布式事务保证原子性。
 package commands
 
 import (
