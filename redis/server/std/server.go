@@ -32,8 +32,8 @@ var (
 // Handler —— 命名含义：redis 服务(命令)处理器，实现 tcp.Handler。
 // 用途：持有存储引擎 db 和全部活跃连接，是 std 版请求处理的中心。
 type Handler struct {
-	activeConn sync.Map      // 活跃连接集合：*connection.Connection -> 占位符{}（用于关闭时遍历）
-	db         idatabase.DB  // 存储引擎（单机或集群），命令最终交给它执行
+	activeConn sync.Map       // 活跃连接集合：*connection.Connection -> 占位符{}（用于关闭时遍历）
+	db         idatabase.DB   // 存储引擎（单机或集群），命令最终交给它执行
 	closing    atomic.Boolean // 是否正在关闭：关闭后拒绝新连接/新请求
 }
 

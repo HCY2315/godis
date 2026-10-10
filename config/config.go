@@ -28,21 +28,21 @@ var (
  */
 type ServerProperties struct {
 	// —— 公共 / 网络 ——
-	RunID             string `cfg:"runid"` // 每次启动都会变的实例 ID
-	Bind              string `cfg:"bind"`  // 监听地址
-	Port              int    `cfg:"port"`  // 监听端口
-	Dir               string `cfg:"dir"`   // 工作目录（持久化文件、tmp 都放这）
-	AnnounceHost      string `cfg:"announce-host"` // 对外宣告地址（NAT 场景用）
-	MaxClients        int    `cfg:"maxclients"`    // 最大客户端数（注意：当前实现未真正校验）
-	RequirePass       string `cfg:"requirepass"`   // 访问密码
-	Databases         int    `cfg:"databases"`     // 库数量，默认 16
+	RunID        string `cfg:"runid"`         // 每次启动都会变的实例 ID
+	Bind         string `cfg:"bind"`          // 监听地址
+	Port         int    `cfg:"port"`          // 监听端口
+	Dir          string `cfg:"dir"`           // 工作目录（持久化文件、tmp 都放这）
+	AnnounceHost string `cfg:"announce-host"` // 对外宣告地址（NAT 场景用）
+	MaxClients   int    `cfg:"maxclients"`    // 最大客户端数（注意：当前实现未真正校验）
+	RequirePass  string `cfg:"requirepass"`   // 访问密码
+	Databases    int    `cfg:"databases"`     // 库数量，默认 16
 
 	// —— 持久化：AOF / RDB ——
-	AppendOnly        bool   `cfg:"appendonly"`          // 是否开启 AOF
-	AppendFilename    string `cfg:"appendfilename"`      // AOF 文件名
-	AppendFsync       string `cfg:"appendfsync"`         // 落盘策略：always/everysec
+	AppendOnly        bool   `cfg:"appendonly"`           // 是否开启 AOF
+	AppendFilename    string `cfg:"appendfilename"`       // AOF 文件名
+	AppendFsync       string `cfg:"appendfsync"`          // 落盘策略：always/everysec
 	AofUseRdbPreamble bool   `cfg:"aof-use-rdb-preamble"` // 重写 AOF 时是否用 RDB 做前缀
-	RDBFilename       string `cfg:"dbfilename"`          // RDB 文件名
+	RDBFilename       string `cfg:"dbfilename"`           // RDB 文件名
 
 	// —— 主从复制 ——
 	MasterAuth        string `cfg:"masterauth"`

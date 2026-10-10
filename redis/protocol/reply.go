@@ -1,3 +1,16 @@
+/*
+ * RESP（REdis Serialization Protocol）回复类型的实现。
+ * 阶段定位：回复阶段——把命令结果序列化成客户端能读懂的字节流。
+ *
+ * RESP 用第一个字节区分类型：
+ *   '+' 简单字符串(状态)   -PongReply/OkReply/StatusReply
+ *   '-' 错误               -StandardErrReply 等
+ *   ':' 整数               -IntReply
+ *   '$' 批量字符串         -BulkReply / NullBulkReply
+ *   '*' 数组               -MultiBulkReply / MultiRawReply / EmptyMultiBulkReply
+ * 每个类型都实现 redis.Reply 接口（即 ToBytes）。
+ * 命名规律：MakeXxxReply 是构造函数，XxxReply 是类型本身。
+ */
 package protocol
 
 import (
@@ -9,26 +22,26 @@ import (
 )
 
 var (
-
-	// CRLF is the line separator of redis serialization protocol
+	// CRLF —— 命名含义：Carriage Return Line Feed，即 "\r\n"，RESP 的行分隔符。
 	CRLF = "\r\n"
 )
 
 /* ---- Bulk Reply ---- */
 
-// BulkReply stores a binary-safe string
+// BulkReply —— 命名含义：批量字符串回复（RESP 的 '$' 类型，二进制安全）。
+// 用途：GET 等返回的 value。
 type BulkReply struct {
 	Arg []byte
 }
 
-// MakeBulkReply creates  BulkReply
+// MakeBulkReply —— 命名含义：构造函数，创建 BulkReply。
 func MakeBulkReply(arg []byte) *BulkReply {
 	return &BulkReply{
 		Arg: arg,
 	}
 }
 
-// ToBytes marshal redis.Reply
+// ToBytes —— 序列化成 "$<len>\r\n<arg>\r\n"；Arg 为 nil 时返回 nullBulk（$-1）。
 func (r *BulkReply) ToBytes() []byte {
 	if r.Arg == nil {
 		return nullBulkBytes
@@ -38,12 +51,13 @@ func (r *BulkReply) ToBytes() []byte {
 
 /* ---- Multi Bulk Reply ---- */
 
-// MultiBulkReply stores a list of string
+// MultiBulkReply —— 命名含义：多批量回复（RESP 的 '*' 数组，元素是批量字符串）。
+// 用途：MGET、LRANGE、以及客户端发来的命令本身都用它表示。
 type MultiBulkReply struct {
 	Args [][]byte
 }
 
-// MakeMultiBulkReply creates MultiBulkReply
+// MakeMultiBulkReply —— 命名含义：构造函数，创建 MultiBulkReply。
 func MakeMultiBulkReply(args [][]byte) *MultiBulkReply {
 	return &MultiBulkReply{
 		Args: args,
@@ -87,7 +101,8 @@ func (r *MultiBulkReply) ToBytes() []byte {
 
 /* ---- Multi Raw Reply ---- */
 
-// MultiRawReply store complex list structure, for example GeoPos command
+// MultiRawReply —— 命名含义：多“原始”回复，数组元素本身就是完整的 Reply（可嵌套）。
+// 用途：元素类型不统一的复杂结构，例如 GEOPOS 返回 [经度,纬度] 的嵌套数组。
 type MultiRawReply struct {
 	Replies []redis.Reply
 }
@@ -112,12 +127,13 @@ func (r *MultiRawReply) ToBytes() []byte {
 
 /* ---- Status Reply ---- */
 
-// StatusReply stores a simple status string
+// StatusReply —— 命名含义：状态回复（RESP 的 '+' 简单字符串）。
+// 用途：非二进制安全的一句状态，如 "+Background saving started"。
 type StatusReply struct {
 	Status string
 }
 
-// MakeStatusReply creates StatusReply
+// MakeStatusReply —— 命名含义：构造函数，创建 StatusReply。
 func MakeStatusReply(status string) *StatusReply {
 	return &StatusReply{
 		Status: status,
@@ -136,7 +152,8 @@ func IsOKReply(reply redis.Reply) bool {
 
 /* ---- Int Reply ---- */
 
-// IntReply stores an int64 number
+// IntReply —— 命名含义：整数回复（RESP 的 ':' 类型）。
+// 用途：INCR、DEL 返回的计数等。
 type IntReply struct {
 	Code int64
 }
@@ -155,13 +172,14 @@ func (r *IntReply) ToBytes() []byte {
 
 /* ---- Error Reply ---- */
 
-// ErrorReply is an error and redis.Reply
+// ErrorReply —— 命名含义：既是一个 Go error，又是一个 redis.Reply。
+// 用途：命令出错时既能当错误返回给上层逻辑，又能序列化成 '-' 开头的响应发给客户端。
 type ErrorReply interface {
 	Error() string
 	ToBytes() []byte
 }
 
-// StandardErrReply represents server error
+// StandardErrReply —— 命名含义：标准错误回复（RESP 的 '-' 类型）。
 type StandardErrReply struct {
 	Status string
 }

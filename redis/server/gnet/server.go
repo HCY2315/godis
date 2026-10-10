@@ -24,10 +24,10 @@ import (
 // 用途：内嵌 gnet.BuiltinEventEngine（提供四个回调的空实现，只重写需要的），
 // 并持有存储引擎 db 与在线连接计数。
 type GnetServer struct {
-	gnet.BuiltinEventEngine        // 事件引擎的默认实现（空方法），便于只覆盖部分回调
-	eng       gnet.Engine          // 引擎句柄，用于关闭
-	connected int32                // 在线连接数（原子操作）
-	db        database.DB          // 存储引擎，与 std 版共用
+	gnet.BuiltinEventEngine             // 事件引擎的默认实现（空方法），便于只覆盖部分回调
+	eng                     gnet.Engine // 引擎句柄，用于关闭
+	connected               int32       // 在线连接数（原子操作）
+	db                      database.DB // 存储引擎，与 std 版共用
 }
 
 // NewGnetServer —— 用途：仅注入 db，真正的监听在 Run 里。
