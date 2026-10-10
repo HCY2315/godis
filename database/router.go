@@ -47,7 +47,7 @@ const flagWrite = 0
 
 const (
 	flagReadOnly = 1 << iota
-	flagSpecial            // 命名含义：特殊命令，在主 Server.Exec 里直接处理，不走 DB.execNormalCommand
+	flagSpecial  // 命名含义：特殊命令，在主 Server.Exec 里直接处理，不走 DB.execNormalCommand
 )
 
 // registerCommand —— 用途：注册一条“普通命令”（只读写有限个 key 的命令）。

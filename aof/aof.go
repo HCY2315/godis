@@ -1,3 +1,13 @@
+/*
+ * AOF（Append Only File）持久化。
+ * 阶段定位：持久化阶段。每执行一条写命令，就把命令本身追加到 AOF 文件；
+ * 重启时重放这些命令即可恢复数据。
+ * 命名说明：
+ *   Persister —— 持久化器，负责把命令写入文件
+ *   payload   —— 投递给写盘 goroutine 的“一条待落盘命令”
+ *   Listener  —— 监听者，命令落盘后可转发给从节点等
+ * 三点核心机制：aofChan 异步队列、pausingAof 暂停锁（供重写用）、支持 always/everysec 两种 fsync。
+ */
 package aof
 
 import (

@@ -73,6 +73,8 @@ func (locks *Locks) RUnLock(key string) {
 	mu.RUnlock()
 }
 
+// toLockIndices —— 用途：把一组 key 映射成去重且排序后的分片下标。
+// 排序是防死锁的关键：所有调用方以同一顺序加锁；解锁时用 reverse 逆序。
 func (locks *Locks) toLockIndices(keys []string, reverse bool) []uint32 {
 	indexMap := make(map[uint32]struct{})
 	for _, key := range keys {
