@@ -1,12 +1,15 @@
+// linked.go：双向链表实现。是 List 接口的一种实现，
+// 用于需要频繁头尾增删的场景；godis 默认列表用更省内存的 quicklist.go。
 package list
 
-// LinkedList is doubly linked list
+// LinkedList —— 命名含义：双向链表。
 type LinkedList struct {
 	first *node
 	last  *node
 	size  int
 }
 
+// node —— 命名含义：链表节点（存值 + 前后指针）。
 type node struct {
 	val  interface{}
 	prev *node

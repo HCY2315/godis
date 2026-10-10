@@ -1,14 +1,16 @@
+// quicklist.go：快速列表，godis 列表(LIST 命令)的默认实现。
+// 设计：链表 + 分页数组——每个节点是一页 []interface{}（pageSize 个元素），页之间用链表连接。
+// 相比纯链表，它减少了指针开销、提升了内存局部性与区间读取性能（类似 Redis 的 quicklist）。
 package list
 
 import "container/list"
 
-// pageSize must be even
+// pageSize —— 每页元素个数（必须为偶数）。
 const pageSize = 1024
 
-// QuickList is a linked list of page (which type is []interface{})
-// QuickList has better performance than LinkedList of Add, Range and memory usage
+// QuickList —— 命名含义：快速列表，元素分批存在 page 里，page 之间用链表连接。
 type QuickList struct {
-	data *list.List // list of []interface{}
+	data *list.List // 元素是 []interface{}（每一页）
 	size int
 }
 

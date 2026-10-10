@@ -1,3 +1,5 @@
+// border.go：ZSET 范围查询的边界解析（ScoreBorder/LexBorder），
+// 把 "2.718"、"(2"、"+inf"、"-inf" 这类参数解析成可比较的边界对象。
 package sortedset
 
 import (

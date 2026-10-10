@@ -1,3 +1,5 @@
+// set.go：集合类型（Redis 的 SET 命令底层）。
+// 实现方式：直接复用 dict 存成员（成员作 key，值忽略），从而天然去重。
 package set
 
 import (
@@ -5,7 +7,7 @@ import (
 	"github.com/hdt3213/godis/lib/wildcard"
 )
 
-// Set is a set of elements based on hash table
+// Set —— 命名含义：集合（基于哈希表去重）。
 type Set struct {
 	dict dict.Dict
 }

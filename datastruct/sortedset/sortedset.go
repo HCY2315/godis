@@ -1,3 +1,6 @@
+// sortedset.go：有序集合（ZSET 命令底层）。
+// 结构：dict（member -> Element，O(1) 查分值）+ skiplist（按分值有序，支持范围/排名查询）。
+// 这是 Redis 的经典双结构设计。
 package sortedset
 
 import (
@@ -6,10 +9,10 @@ import (
 	"github.com/hdt3213/godis/lib/wildcard"
 )
 
-// SortedSet is a set which keys sorted by bound score
+// SortedSet —— 命名含义：有序集合，按分值排序。
 type SortedSet struct {
-	dict     map[string]*Element
-	skiplist *skiplist
+	dict     map[string]*Element // member -> 元素（快速按成员查）
+	skiplist *skiplist           // 按分值有序（范围/排名查询）
 }
 
 // Make makes a new SortedSet
