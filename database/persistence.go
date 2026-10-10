@@ -1,3 +1,8 @@
+/*
+ * RDB 持久化与 AOF 挂钩：启动加载 + 命令写入 AOF 的绑定。
+ * 阶段定位：持久化阶段。RDB 是“数据快照”，AOF 是“命令日志”，二者互补。
+ * 命名说明：loadRdbFile/LoadRDB 负责读快照，bindPersister 把每个 DB 的 addAof 接到 Persister。
+ */
 package database
 
 import (
@@ -16,7 +21,7 @@ import (
 	rdb "github.com/hdt3213/rdb/parser"
 )
 
-// loadRdbFile loads rdb file from disk
+// loadRdbFile —— 用途：从配置的 RDB 文件加载数据（启动时调用）。
 func (server *Server) loadRdbFile() error {
 	rdbFile, err := os.Open(config.Properties.RDBFilename)
 	if err != nil {
@@ -33,7 +38,7 @@ func (server *Server) loadRdbFile() error {
 	return nil
 }
 
-// LoadRDB real implementation of loading rdb file
+// LoadRDB —— 用途：真正解析 RDB 流并按类型还原成 DataEntity 存入对应库。
 func (server *Server) LoadRDB(dec *core.Decoder) error {
 	return dec.Parse(func(o rdb.RedisObject) bool {
 		db := server.mustSelectDB(o.GetDBIndex())
@@ -99,12 +104,15 @@ func NewPersister(db database.DBEngine, filename string, load bool, fsync string
 	})
 }
 
+// AddAof —— 用途：把命令追加到 AOF（未开启持久化时 persister 为 nil，静默忽略）。
 func (server *Server) AddAof(dbIndex int, cmdLine CmdLine) {
 	if server.persister != nil {
 		server.persister.SaveCmdLine(dbIndex, cmdLine)
 	}
 }
 
+// bindPersister —— 用途：绑定持久化器，并把每个 DB 的 addAof 回调接到 Persister 上。
+// 这是“写命令后自动落 AOF”的连接点。
 func (server *Server) bindPersister(persister *aof.Persister) {
 	server.persister = persister
 	// bind SaveCmdLine
@@ -118,7 +126,8 @@ func (server *Server) bindPersister(persister *aof.Persister) {
 	}
 }
 
-// MakeAuxiliaryServer create a Server only with basic capabilities for aof rewrite and other usages
+// MakeAuxiliaryServer —— 命名含义：辅助 Server，只有基本能力。
+// 用途：AOF 重写等场景需要一个临时空库来承载数据，不需要复制/慢日志等完整功能。
 func MakeAuxiliaryServer() *Server {
 	mdb := &Server{}
 	mdb.dbSet = make([]*atomic.Value, config.Properties.Databases)

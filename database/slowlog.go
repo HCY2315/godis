@@ -9,25 +9,28 @@ import (
 	"time"
 )
 
+// SlowLogEntry —— 命名含义：一条慢日志记录。
 type SlowLogEntry struct {
-	ID        int64
-	Timestamp time.Time
-	Duration  int64
-	Command   [][]byte
-	PeerId    string
+	ID        int64     // 自增 ID
+	Timestamp time.Time // 执行开始时间
+	Duration  int64     // 耗时（微秒）
+	Command   [][]byte  // 原始命令
+	PeerId    string    // 来源客户端
 }
 
-// SlowLogger Slow query logger
+// SlowLogger —— 命名含义：慢查询记录器。
+// 用途：命令执行超过 threshold（微秒）就记一条，用环形数组保存最近 maxEntries 条。
+// 注意：Record 在每条命令后都会调用（含一次 time.Since），是命令路径的固定开销之一。
 type SlowLogger struct {
 	mu         sync.RWMutex
-	entries    []*SlowLogEntry
-	count      int
-	nextIdx    int
-	maxEntries int
+	entries    []*SlowLogEntry // 环形数组
+	count      int             // 当前条数
+	nextIdx    int             // 环形数组写指针
+	maxEntries int             // 容量
 
-	threshold   int64
-	nextID      int64
-	logCommands [][]byte
+	threshold   int64    // 慢日志阈值（微秒）
+	nextID      int64    // 下一条日志 ID
+	logCommands [][]byte // 需要记录日志的命令白名单
 }
 
 func NewSlowLogger(maxEntries int, threshold int64) *SlowLogger {
@@ -41,6 +44,7 @@ func NewSlowLogger(maxEntries int, threshold int64) *SlowLogger {
 	}
 }
 
+// Record —— 用途：记录一次命令耗时；未超阈值则直接返回。
 func (sl *SlowLogger) Record(start time.Time, args [][]byte, client string) {
 	if sl == nil || len(sl.entries) == 0 {
 		return

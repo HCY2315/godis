@@ -38,15 +38,17 @@ const (
 	aofQueueSize = 1 << 20
 )
 
+// AOF 落盘策略。
 const (
-	// FsyncAlways do fsync for every command
+	// FsyncAlways —— 每条命令都 fsync，最安全但最慢（性能杀手）。
 	FsyncAlways = "always"
-	// FsyncEverySec do fsync every second
+	// FsyncEverySec —— 每秒 fsync 一次，性能与安全的折中。
 	FsyncEverySec = "everysec"
-	// FsyncNo lets operating system decides when to do fsync
+	// FsyncNo —— 交给操作系统决定何时 fsync。
 	FsyncNo = "no"
 )
 
+// payload —— 命名含义：一条待写入 AOF 的命令载荷。
 type payload struct {
 	cmdLine CmdLine
 	dbIndex int
@@ -60,27 +62,30 @@ type Listener interface {
 	Callback([]CmdLine)
 }
 
-// Persister receive msgs from channel and write to AOF file
+// Persister —— 命名含义：AOF 持久化器。
+// 用途：接收命令（SaveCmdLine）→ 入 aofChan 队列 → 后台 goroutine 串行写文件。
+// 关键字段说明见下方注释。
 type Persister struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
-	db         database.DBEngine
-	tmpDBMaker func() database.DBEngine
-	// aofChan is the channel to receive aof payload(listenCmd will send payload to this channel)
+	db         database.DBEngine           // 存储引擎（重写/加载时用）
+	tmpDBMaker func() database.DBEngine    // 生成临时库的工厂（重写时用）
+	// aofChan —— 命名含义：接收待落盘命令的通道（listenCmd 从这里读）。缓冲极大(1<<20)
 	aofChan chan *payload
-	// aofFile is the file handler of aof file
+	// aofFile —— AOF 文件句柄
 	aofFile *os.File
-	// aofFilename is the path of aof file
+	// aofFilename —— AOF 文件路径
 	aofFilename string
-	// aofFsync is the strategy of fsync
+	// aofFsync —— fsync 策略（always/everysec/no）
 	aofFsync string
-	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shut down
+	// aofFinished —— 关闭时用来等待写盘 goroutine 处理完剩余命令
 	aofFinished chan struct{}
-	// pause aof for start/finish aof rewrite progress
+	// pausingAof —— 重写 AOF 期间暂停正常写入用的锁
 	pausingAof sync.Mutex
 	currentDB  int
-	listeners  map[Listener]struct{}
-	// reuse cmdLine buffer
+	// listeners —— 命令落盘后的回调方（如主从复制的 master 向 slave 转发）
+	listeners map[Listener]struct{}
+	// buffer —— 复用的命令缓冲，减少分配
 	buffer []CmdLine
 }
 
@@ -125,9 +130,10 @@ func (persister *Persister) RemoveListener(listener Listener) {
 	delete(persister.listeners, listener)
 }
 
-// SaveCmdLine send command to aof goroutine through channel
+// SaveCmdLine —— 用途：把一条命令交给 AOF 处理。
+// always 策略：直接同步写（调用方阻塞）；其它策略：投进 channel 由后台 goroutine 写。
 func (persister *Persister) SaveCmdLine(dbIndex int, cmdLine CmdLine) {
-	// aofChan will be set as nil temporarily during load aof see Persister.LoadAof
+	// 加载 AOF 期间 aofChan 被临时置 nil，避免加载的命令又写回文件
 	if persister.aofChan == nil {
 		return
 	}
@@ -137,10 +143,11 @@ func (persister *Persister) SaveCmdLine(dbIndex int, cmdLine CmdLine) {
 			cmdLine: cmdLine,
 			dbIndex: dbIndex,
 		}
-		persister.writeAof(p)
+		persister.writeAof(p) // 同步写
 		return
 	}
 
+	// 异步：交给 listenCmd goroutine 串行写
 	persister.aofChan <- &payload{
 		cmdLine: cmdLine,
 		dbIndex: dbIndex,
@@ -148,7 +155,7 @@ func (persister *Persister) SaveCmdLine(dbIndex int, cmdLine CmdLine) {
 
 }
 
-// listenCmd listen aof channel and write into file
+// listenCmd —— 用途：后台 goroutine，从 channel 取命令并写盘，直到 channel 关闭。
 func (persister *Persister) listenCmd() {
 	for p := range persister.aofChan {
 		persister.writeAof(p)
@@ -156,11 +163,13 @@ func (persister *Persister) listenCmd() {
 	persister.aofFinished <- struct{}{}
 }
 
+// writeAof —— 用途：真正把一条命令写入 AOF 文件。
+// 写前若库号变化，先补写一条 SELECT 命令；写后触发 listeners 并视策略 fsync。
 func (persister *Persister) writeAof(p *payload) {
-	persister.buffer = persister.buffer[:0] // reuse underlying array
-	persister.pausingAof.Lock()             // prevent other goroutines from pausing aof
+	persister.buffer = persister.buffer[:0] // 复用底层数组，减少分配
+	persister.pausingAof.Lock()             // 阻止其它 goroutine 在此期间暂停/重写 AOF
 	defer persister.pausingAof.Unlock()
-	// ensure aof is in the right database
+	// 保证 AOF 文件里当前库号正确
 	if p.dbIndex != persister.currentDB {
 		// select db
 		selectCmd := utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))
@@ -188,7 +197,9 @@ func (persister *Persister) writeAof(p *payload) {
 	}
 }
 
-// LoadAof read aof file, can only be used before Persister.listenCmd started
+// LoadAof —— 用途：启动时读取 AOF 文件并重放命令来恢复数据。
+// 只能在 listenCmd 启动前调用。文件开头可能是一段 RDB（混合持久化），先按 RDB 解析，
+// 失败则从头按命令流解析。
 func (persister *Persister) LoadAof(maxBytes int) {
 	// persister.db.Exec may call persister.AddAof
 	// delete aofChan to prevent loaded commands back into aofChan
