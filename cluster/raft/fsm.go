@@ -84,7 +84,9 @@ type LogEntry struct {
 	JoinTask      *JoinTask
 }
 
-// Apply is called once a log entry is committed by a majority of the cluster.
+// Apply —— 用途：raft 日志被多数节点提交后回调，按事件类型更新集群元数据。
+// 这里是“所有节点对集群拓扑保持一致”的关键：同一份日志在每个节点重放出同样状态。
+// 事件类型：EventStartMigrate/EventFinishMigrate（迁移）、EventSeedStart（初始化）、EventFinishFailover（故障转移）等。
 func (fsm *FSM) Apply(log *raft.Log) interface{} {
 	fsm.mu.Lock()
 	defer fsm.mu.Unlock()
