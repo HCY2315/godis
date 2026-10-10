@@ -71,15 +71,18 @@ func main() {
 	// 【阶段3+4】构造存储引擎并选择网络层
 	var err error
 	if config.Properties.UseGnet {
+		// gnet 版：事件驱动 + epoll（选它需要在配置里写 use-gnet yes）
 		var db idatabase.DB
 		if config.Properties.ClusterEnable {
-			db = cluster.MakeCluster()
+			db = cluster.MakeCluster() // 集群模式
 		} else {
-			db = database.NewStandaloneServer()
+			db = database.NewStandaloneServer() // 单机模式
 		}
 		server := gnet.NewGnetServer(db)
 		err = server.Run(listenAddr)
 	} else {
+		// std 版：每连接一个 goroutine（默认走这里）
+		// MakeHandler 内部同样会根据 cluster-enable 决定用集群还是单机 db
 		handler := stdserver.MakeHandler()
 		err = stdserver.Serve(listenAddr, handler)
 	}

@@ -20,38 +20,50 @@ var (
 	StandaloneMode = "standalone"
 )
 
-// ServerProperties defines global config properties
+/*
+ * ServerProperties —— 命名含义：服务端配置项集合。
+ * 用途：把配置文件里的 key=value 通过结构体 tag 反射填充进来（见下方 parse）。
+ * 配置来源优先级：环境变量 CONFIG 指定的文件 > 工作目录 redis.conf > 内置默认值。
+ * 字段分四大类：公共/网络、持久化(AOF/RDB)、慢日志、集群与复制。
+ */
 type ServerProperties struct {
-	// for Public configuration
-	RunID             string `cfg:"runid"` // runID always different at every exec.
-	Bind              string `cfg:"bind"`
-	Port              int    `cfg:"port"`
-	Dir               string `cfg:"dir"`
-	AnnounceHost      string `cfg:"announce-host"`
-	AppendOnly        bool   `cfg:"appendonly"`
-	AppendFilename    string `cfg:"appendfilename"`
-	AppendFsync       string `cfg:"appendfsync"`
-	AofUseRdbPreamble bool   `cfg:"aof-use-rdb-preamble"`
-	MaxClients        int    `cfg:"maxclients"`
-	RequirePass       string `cfg:"requirepass"`
-	Databases         int    `cfg:"databases"`
-	RDBFilename       string `cfg:"dbfilename"`
+	// —— 公共 / 网络 ——
+	RunID             string `cfg:"runid"` // 每次启动都会变的实例 ID
+	Bind              string `cfg:"bind"`  // 监听地址
+	Port              int    `cfg:"port"`  // 监听端口
+	Dir               string `cfg:"dir"`   // 工作目录（持久化文件、tmp 都放这）
+	AnnounceHost      string `cfg:"announce-host"` // 对外宣告地址（NAT 场景用）
+	MaxClients        int    `cfg:"maxclients"`    // 最大客户端数（注意：当前实现未真正校验）
+	RequirePass       string `cfg:"requirepass"`   // 访问密码
+	Databases         int    `cfg:"databases"`     // 库数量，默认 16
+
+	// —— 持久化：AOF / RDB ——
+	AppendOnly        bool   `cfg:"appendonly"`          // 是否开启 AOF
+	AppendFilename    string `cfg:"appendfilename"`      // AOF 文件名
+	AppendFsync       string `cfg:"appendfsync"`         // 落盘策略：always/everysec
+	AofUseRdbPreamble bool   `cfg:"aof-use-rdb-preamble"` // 重写 AOF 时是否用 RDB 做前缀
+	RDBFilename       string `cfg:"dbfilename"`          // RDB 文件名
+
+	// —— 主从复制 ——
 	MasterAuth        string `cfg:"masterauth"`
 	SlaveAnnouncePort int    `cfg:"slave-announce-port"`
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
-	UseGnet           bool   `cfg:"use-gnet"`
 
-	SlowLogSlowerThan int64 `cfg:"slowlog-log-slower-than"`
-	SlowLogMaxLen     int   `cfg:"slowlog-max-len"`
+	// —— 网络层选择 ——
+	UseGnet bool `cfg:"use-gnet"` // true=用 gnet 事件驱动模型；false=用 std 协程模型
 
-	ClusterEnable     bool   `cfg:"cluster-enable"`
-	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
-	ClusterSeed       string `cfg:"cluster-seed"`
-	RaftListenAddr    string `cfg:"raft-listen-address"`
+	// —— 慢日志 ——
+	SlowLogSlowerThan int64 `cfg:"slowlog-log-slower-than"` // 超过多少微秒记为慢命令
+	SlowLogMaxLen     int   `cfg:"slowlog-max-len"`         // 慢日志最多保留多少条
+
+	// —— 集群 ——
+	ClusterEnable     bool   `cfg:"cluster-enable"`      // 是否以集群模式启动
+	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`     // 是否作为种子节点加入集群
+	ClusterSeed       string `cfg:"cluster-seed"`        // 种子节点地址
+	RaftListenAddr    string `cfg:"raft-listen-address"` // raft 一致性协议监听地址
 	RaftAdvertiseAddr string `cfg:"raft-advertise-address"`
-	// If the node join the cluster as a replica of another node,
-	// set MasterInCluster as the RedisAdvertiseAddr of it's master node
+	// 以副本身份加入集群时，填主节点的 RedisAdvertiseAddr
 	MasterInCluster string `cfg:"master-in-cluster"`
 }
 
