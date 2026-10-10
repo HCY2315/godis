@@ -7,16 +7,19 @@ import (
 	"sync"
 )
 
-// FakeConn implements redis.Connection for test
+// FakeConn —— 命名含义：假的连接（测试用）。
+// 用途：不依赖真实网络，用内存 buffer 模拟收发，方便对命令和服务做单元测试。
+// 工作方式：Write 把数据追加到 buf 并唤醒等待者；Read 从 buf 读取，读空了就阻塞等待。
 type FakeConn struct {
 	Connection
-	buf    []byte
-	offset int
-	waitOn chan struct{}
+	buf    []byte      // 模拟的接收/发送缓冲区
+	offset int         // 已读位置
+	waitOn chan struct{} // 读空时用于阻塞等待新数据
 	closed bool
 	mu     sync.Mutex
 }
 
+// NewFakeConn —— 用途：创建测试用连接。
 func NewFakeConn() *FakeConn {
 	c := &FakeConn{}
 	return c

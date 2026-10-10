@@ -1,3 +1,11 @@
+/*
+ * connection.Connection —— interface/redis.Connection 的具体实现。
+ * 阶段定位：贯穿“接入 → 解析 → 执行 → 回复”。
+ * 设计要点：std 与 gnet 两个网络层共用这一个类型——
+ *   - std 传入 net.Conn；
+ *   - gnet 传入 gnet.Conn（它同样实现了 net.Conn）。
+ * 因此换网络库不影响命令逻辑。
+ */
 package connection
 
 import (
@@ -9,41 +17,45 @@ import (
 	"github.com/hdt3213/godis/lib/sync/wait"
 )
 
+// 用位标志表示连接状态，节省空间。1<<iota 让每个常量占一个二进制位。
 const (
-	// flagSlave means this a connection with slave
+	// flagSlave —— 命名含义：该连接对端是一个 slave 节点。
 	flagSlave = uint64(1 << iota)
-	// flagSlave means this a connection with master
+	// flagMaster —— 命名含义：该连接对端是本节点的 master 节点。
 	flagMaster
-	// flagMulti means this connection is within a transaction
+	// flagMulti —— 命名含义：该连接处于 MULTI 事务队列中。
 	flagMulti
 )
 
-// Connection represents a connection with a redis-cli
+// Connection —— 命名含义：与一个 redis-cli（或 slave/master）的连接。
+// 用途：把“底层网络连接 conn”和“本次会话的所有状态”打包在一起。
 type Connection struct {
-	conn net.Conn
+	conn net.Conn // 底层网络连接（std 为 *net.TCPConn，gnet 为 gnet.Conn）
 
-	// wait until finish sending data, used for graceful shutdown
+	// sendingData —— 用途：优雅关闭时等待“正在发送的数据”发送完，避免半包。
 	sendingData wait.Wait
 
-	// lock while server sending response
+	// mu —— 用途：写响应/改订阅时的互斥锁；flags 是上面三个位标志的组合。
 	mu    sync.Mutex
 	flags uint64
 
-	// subscribing channels
+	// subs —— 命名含义：subscriptions，该连接订阅的频道集合。
 	subs map[string]bool
 
-	// password may be changed by CONFIG command during runtime, so store the password
+	// password —— 认证密码，存连接上是因为 CONFIG 命令运行时可改。
 	password string
 
-	// queued commands for `multi`
+	// 事务(MULTI)相关：入队命令、WATCH 的键及版本号、入队期语法错误。
 	queue    [][][]byte
 	watching map[string]uint32
 	txErrors []error
 
-	// selected db
+	// selectedDB —— 当前选中的库（SELECT 命令修改）。
 	selectedDB int
 }
 
+// connPool —— 命名含义：连接对象池。
+// 用途：用 sync.Pool 复用 Connection 对象，连接关闭时不真正释放，降低 GC 压力。
 var connPool = sync.Pool{
 	New: func() interface{} {
 		return &Connection{}
@@ -55,23 +67,24 @@ func (c *Connection) RemoteAddr() string {
 	return c.conn.RemoteAddr().String()
 }
 
-// Close disconnect with the client
+// Close —— 用途：断开连接。先等待未发完的数据（最多 10s），再重置会话状态并归还对象池。
 func (c *Connection) Close() error {
 	c.sendingData.WaitWithTimeout(10 * time.Second)
-	if c.conn != nil { // may be a fake conn for tests
+	if c.conn != nil { // 测试时可能是 fake conn
 		_ = c.conn.Close()
 	}
+	// 重置全部会话状态，保证对象被复用时是干净的
 	c.subs = nil
 	c.password = ""
 	c.queue = nil
 	c.watching = nil
 	c.txErrors = nil
 	c.selectedDB = 0
-	connPool.Put(c)
+	connPool.Put(c) // 归还对象池
 	return nil
 }
 
-// NewConn creates Connection instance
+// NewConn —— 用途：从对象池取一个 Connection 并绑定底层 net.Conn。
 func NewConn(conn net.Conn) *Connection {
 	c, ok := connPool.Get().(*Connection)
 	if !ok {
@@ -85,7 +98,8 @@ func NewConn(conn net.Conn) *Connection {
 }
 
 
-// Write sends response to client over tcp connection
+// Write —— 用途：把响应写回客户端。用 sendingData 计数标记“正在发送”，
+// 让 Close 能等待发送完成，避免客户端收到半截响应。
 func (c *Connection) Write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
