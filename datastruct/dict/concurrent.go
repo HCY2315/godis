@@ -10,13 +10,18 @@ import (
 	"time"
 )
 
-// ConcurrentDict is thread safe map using sharding lock
+// ConcurrentDict —— 命名含义：并发字典。
+// 用途：godis 的核心存储结构，线程安全的地图。
+// 实现：把一个 map 拆成 N 个分片(shard)，每片一把读写锁；不同 key 落在不同分片时
+// 可以真正并行读写，从而让多核得到利用（这也是它比 Redis 单线程强的地方）。
+// 注意：Go 原生 map 并非并发安全，所以这里靠分片锁而不是自研哈希表。
 type ConcurrentDict struct {
-	table      []*shard
-	count      int32
-	shardCount int
+	table      []*shard // 分片数组
+	count      int32    // 总键数（原子计数）
+	shardCount int      // 分片数
 }
 
+// shard —— 命名含义：分片，一个带读写锁的小 map。
 type shard struct {
 	m     map[string]interface{}
 	mutex sync.RWMutex
@@ -403,7 +408,9 @@ func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 
 	return indices
 }
 
-// RWLocks locks write keys and read keys together. allow duplicate keys
+// RWLocks —— 用途：同时为一批写 key / 读 key 加锁。
+// 关键细节：先把 key 映射成“分片下标”，去重并排序，再统一加锁，
+// 保证多个命令以相同顺序加锁，避免死锁。这条路径每个命令都会走，是主要开销点。
 func (dict *ConcurrentDict) RWLocks(writeKeys []string, readKeys []string) {
 	keys := append(writeKeys, readKeys...)
 	indices := dict.toLockIndices(keys, false)

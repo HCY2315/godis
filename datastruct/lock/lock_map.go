@@ -1,3 +1,6 @@
+// lock 包：按 key 分片的读写锁表。
+// 用途：把 key 哈希到有限个分片上，每个分片一把 RWMutex，
+// 从而在“按 key 加锁”的同时允许不同 key 并行。是命令执行阶段用的加锁设施。
 package lock
 
 import (
@@ -9,12 +12,12 @@ const (
 	prime32 = uint32(16777619)
 )
 
-// Locks provides rw locks for key
+// Locks —— 命名含义：锁表。table 里每个元素是一把 RWMutex，代表一个“锁分片”。
 type Locks struct {
 	table []*sync.RWMutex
 }
 
-// Make creates a new lock map
+// Make —— 用途：创建含 tableSize 个锁分片的锁表。
 func Make(tableSize int) *Locks {
 	table := make([]*sync.RWMutex, tableSize)
 	for i := 0; i < tableSize; i++ {
