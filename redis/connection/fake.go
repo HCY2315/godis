@@ -12,8 +12,8 @@ import (
 // 工作方式：Write 把数据追加到 buf 并唤醒等待者；Read 从 buf 读取，读空了就阻塞等待。
 type FakeConn struct {
 	Connection
-	buf    []byte      // 模拟的接收/发送缓冲区
-	offset int         // 已读位置
+	buf    []byte        // 模拟的接收/发送缓冲区
+	offset int           // 已读位置
 	waitOn chan struct{} // 读空时用于阻塞等待新数据
 	closed bool
 	mu     sync.Mutex

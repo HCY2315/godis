@@ -18,20 +18,22 @@ const (
 	ttlDictSize  = 1 << 10
 )
 
-// DB stores data and execute user's commands
+// DB —— 命名含义：单个数据库（redis 有 16 个，用下标区分）。
+// 用途：存数据、执行命令、维护过期时间与 WATCH 版本号。
+// 三个 dict 都用 ConcurrentDict（分片并发哈希），使不同 key 可并行访问。
 type DB struct {
 	index int
-	// key -> DataEntity
+	// data —— 主数据表：key -> *DataEntity
 	data *dict.ConcurrentDict
-	// key -> expireTime (time.Time)
+	// ttlMap —— 过期表：key -> expireTime (time.Time)
 	ttlMap *dict.ConcurrentDict
-	// key -> version(uint32)
+	// versionMap —— 版本表：key -> version(uint32)，用于 WATCH 的乐观锁
 	versionMap *dict.ConcurrentDict
 
-	// addaof is used to add command to aof
+	// addAof —— 命名含义：将命令追加到 AOF 的函数（未开启 AOF 时是空函数）。
 	addAof func(CmdLine)
 
-	// callbacks
+	// 键事件回调：键插入/删除时触发
 	insertCallback database.KeyEventCallback
 	deleteCallback database.KeyEventCallback
 }
@@ -73,9 +75,11 @@ func makeBasicDB() *DB {
 	return db
 }
 
-// Exec executes command within one database
+// Exec —— 用途：在“单个数据库”内执行命令。
+// 先拦截事务控制命令（MULTI/DISCARD/EXEC/WATCH），若处于 MULTI 中则改为入队，
+// 否则走普通命令执行路径。
 func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
-	// transaction control commands and other commands which cannot execute within transaction
+	// 事务控制命令及其它不能放入事务队列的命令
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "multi" {
 		if len(cmdLine) != 1 {
@@ -105,8 +109,11 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
 	return db.execNormalCommand(cmdLine)
 }
 
+// execNormalCommand —— 用途：执行一条普通命令的完整流程。
+// 流程：查表 → 校验参数 → 提取读写 key → 更新版本号 → 按 key 加锁 → 执行 → 解锁。
+// 【性能关键点】这里的 addVersion + 构造写 key 的 map 锁是每条命令的固定开销。
 func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
-	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmdName := strings.ToLower(string(cmdLine[0])) // 注意：每条命令一次 ToLower 分配
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
 		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
@@ -115,11 +122,15 @@ func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 		return protocol.MakeArgNumErrReply(cmdName)
 	}
 
+	// prepare 解析出该命令要写/读哪些 key
 	prepare := cmd.prepare
 	write, read := prepare(cmdLine[1:])
+	// 为 WATCH 机制递增写 key 的版本号
 	db.addVersion(write...)
+	// 按 key 加读写锁（分片锁，不同 key 可并行，热点 key 会串行）
 	db.RWLocks(write, read)
 	defer db.RWUnLocks(write, read)
+	// 真正执行命令
 	fun := cmd.executor
 	return fun(db, cmdLine[1:])
 }

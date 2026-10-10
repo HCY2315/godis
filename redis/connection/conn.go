@@ -97,7 +97,6 @@ func NewConn(conn net.Conn) *Connection {
 	return c
 }
 
-
 // Write —— 用途：把响应写回客户端。用 sendingData 计数标记“正在发送”，
 // 让 Close 能等待发送完成，避免客户端收到半截响应。
 func (c *Connection) Write(b []byte) (int, error) {
