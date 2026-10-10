@@ -50,7 +50,8 @@ func fileExists(filename string) bool {
 	return err == nil && !info.IsDir()
 }
 
-// NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
+// NewStandaloneServer —— 用途：构造单机存储引擎。步骤：建多库 → 建 pubsub hub →
+// 视配置开启 AOF / 加载 RDB → 初始化主从状态 → 启动复制定时任务 → 建慢日志。
 func NewStandaloneServer() *Server {
 	server := &Server{}
 	if config.Properties.Databases == 0 {
@@ -297,7 +298,7 @@ func (server *Server) flushAll() redis.Reply {
 	return &protocol.OkReply{}
 }
 
-// selectDB returns the database with the given index, or an error if the index is out of range.
+// selectDB —— 用途：按库号取出 *DB；越界返回错误。注意是从 atomic.Value 读取，支持整库替换。
 func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return nil, protocol.MakeErrReply("ERR DB index is out of range")

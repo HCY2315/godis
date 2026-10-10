@@ -1,3 +1,9 @@
+/*
+ * COMMAND 自省命令的实现，以及“特殊命令”在 init() 里的注册。
+ * 命名说明：redisFlagXxx 是命令标志（write/readonly/admin/pubsub...），
+ * 主要用于 COMMAND 命令向客户端描述命令属性，也供只读副本判断能否执行。
+ * 这些 attachCommandExtra 的注册同样在程序启动时执行。
+ */
 package database
 
 import (
