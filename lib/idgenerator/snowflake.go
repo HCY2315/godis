@@ -1,3 +1,5 @@
+// snowflake.go：雪花算法 ID 生成器。生成全局唯一、趋势递增的 uint64 ID。
+// 结构：时间戳 | 机器号 | 序列号，godis 用于集群里生成迁移任务 ID 等。
 package idgenerator
 
 import (

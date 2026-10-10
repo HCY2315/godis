@@ -1,3 +1,9 @@
+/*
+ * 一致性哈希。
+ * 用途：在多个节点间分配 key，且节点增减时尽量少地影响已有映射。
+ * 原理：把节点和 key 都哈希到一个环上，key 顺时针找到的第一个节点就是归属节点；
+ * 为缓解分布不均，引入“虚拟节点”(replicas)。godis 的集群寻址用到它。
+ */
 package consistenthash
 
 import (
@@ -7,15 +13,15 @@ import (
 	"strings"
 )
 
-// HashFunc defines function to generate hash code
+// HashFunc —— 命名含义：哈希函数（把数据映射成 uint32）。
 type HashFunc func(data []byte) uint32
 
-// Map stores nodes and you can pick node from Map
+// Map —— 命名含义：一致性哈希环。
 type Map struct {
 	hashFunc HashFunc
-	replicas int
-	keys     []int // sorted
-	hashMap  map[int]string
+	replicas int            // 每个节点的虚拟节点数
+	keys     []int          // 环上已排序的哈希值
+	hashMap  map[int]string // 哈希值 -> 节点名
 }
 
 // New creates a new Map

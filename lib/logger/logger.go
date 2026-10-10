@@ -1,3 +1,5 @@
+// logger.go：全局日志器。按日期分文件（见 files.go），带级别(Warn/Error/Info...)。
+// 通过 Setup(Settings) 初始化，其它包直接用 logger.Info/Warn/Error。
 package logger
 
 import (
@@ -12,12 +14,12 @@ import (
 	"time"
 )
 
-// Settings stores config for Logger
+// Settings —— 命名含义：日志配置。
 type Settings struct {
-	Path       string `yaml:"path"`
-	Name       string `yaml:"name"`
-	Ext        string `yaml:"ext"`
-	TimeFormat string `yaml:"time-format"`
+	Path       string `yaml:"path"`        // 日志目录
+	Name       string `yaml:"name"`        // 文件前缀
+	Ext        string `yaml:"ext"`         // 扩展名
+	TimeFormat string `yaml:"time-format"` // 文件名里的时间格式（按此滚动）
 }
 
 type LogLevel int

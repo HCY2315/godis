@@ -1,3 +1,5 @@
+// geohash.go：地理编码。把经纬度编码成整数/字符串，并支持邻域计算。
+// 用途：GEO 系列命令；编码后的整数作为 ZSET 的 score，实现附近位置排序与搜索。
 package geohash
 
 import (

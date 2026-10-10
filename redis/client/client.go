@@ -21,27 +21,55 @@ const (
 	closed
 )
 
-// Client is a pipeline mode redis client
+/*
+ * Redis 客户端（pipeline 模式）。
+ * 用途：godis 作为“客户端”连接别的 godis/redis 节点，用于集群转发、主从复制等内部通信。
+ * 特点：支持流水线——写入与读取由两个后台 goroutine 分别处理，请求通过 channel 排队，
+ * 从而一次连接并发发送多条命令、提高吞吐。
+ */
+package client
+
+import (
+	"errors"
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/sync/wait"
+	"github.com/hdt3213/godis/redis/parser"
+	"github.com/hdt3213/godis/redis/protocol"
+	"net"
+	"runtime/debug"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// Client —— 命名含义：pipeline 模式的 redis 客户端。
 type Client struct {
 	conn        net.Conn
-	pendingReqs chan *request // wait to send
-	waitingReqs chan *request // waiting response
-	ticker      *time.Ticker
+	pendingReqs chan *request // 待发送队列
+	waitingReqs chan *request // 待响应队列
+	ticker      *time.Ticker  // 心跳定时器
 	addr        string
 
 	status  int32
-	working *sync.WaitGroup // its counter presents unfinished requests(pending and waiting)
+	working *sync.WaitGroup // 计数未完成的请求（待发+待收）
 }
 
-// request is a message sends to redis server
+// request —— 命名含义：发往服务器的一条请求及其回复。
 type request struct {
 	id        uint64
 	args      [][]byte
 	reply     redis.Reply
-	heartbeat bool
-	waiting   *wait.Wait
+	heartbeat bool       // 是否是心跳请求
+	waiting   *wait.Wait // 等待应答
 	err       error
 }
+
+const (
+	chanSize = 256
+	maxWait  = 3 * time.Second
+)
 
 const (
 	chanSize = 256
