@@ -19,18 +19,21 @@ import (
 )
 
 /*
-`execPSync` receives `slaveof` command. Depending on the status of rdb, there are two branches:
+ * 主从复制——主节点(master)视角。
+ * 阶段定位：复制阶段。master 接收 slave 的 PSYNC 请求，决定“全量同步”还是“增量同步”。
+ *
+ * 全量同步(Full Resync)：master 生成 RDB 发给 slave，并把生成期间的写命令也补发。
+ * 增量同步(Partial Resync/PSYNC2)：slave 断线重连时，只要它记录的 offset 还在
+ *   复制积压缓冲(backlog)里，就只补发差量，无需重传 RDB。
+ *
+ * 命名说明：
+ *   slaveClient     —— master 眼里“一个已连接 slave”的状态
+ *   replBacklog     —— 命名含义：复制积压缓冲区，环形保存近期写命令流，用于断线续传
+ *   masterStatus    —— master 的全部复制状态
+ *   replAofListener —— 监听 AOF 写入，把命令同时追加进 backlog 并广播给 slave
+ */
 
-Branch A: rdb is not ready
-1. Master adds the client into `server.masterStatus.waitSlaves`. 
-2. If there is no rdb generation in progress, calls `saveForReplication` to start.
-3. `persister.GenerateRDBForReplication` generates rdb file and sends following updates after rdb to parameter `listener`
-4. After the rdb generation is done, `saveForReplication` calls `masterFullReSyncWithSlave` to send rdb to `waitSlaves`
-
-Branch B: rdb is ready
-runs `masterTryPartialSyncWithSlave` if cannot go partial sync, go to `masterFullReSyncWithSlave`
-*/
-
+// slaveClient 在 master 上的状态机阶段：握手 -> 等待 RDB 生成 -> 发送 RDB -> 在线
 const (
 	slaveStateHandShake = uint8(iota)
 	slaveStateWaitSaveEnd
@@ -38,34 +41,37 @@ const (
 	slaveStateOnline
 )
 
+// RDB 后台生成状态
 const (
 	bgSaveIdle = uint8(iota)
 	bgSaveRunning
 	bgSaveFinish
 )
 
+// slave 能力位（PSYNC2 需要双方都支持 EOF 与 psync2）
 const (
 	slaveCapacityNone = 0
 	slaveCapacityEOF  = 1 << iota
 	slaveCapacityPsync2
 )
 
-// slaveClient stores slave status in the view of master
+// slaveClient —— 命名含义：一个从节点客户端（主节点侧保存的状态）。
 type slaveClient struct {
-	conn         redis.Connection
-	state        uint8
-	offset       int64
-	lastAckTime  time.Time
-	announceIp   string
+	conn         redis.Connection // 与 slave 的连接
+	state        uint8            // 状态机（见 slaveStateXxx）
+	offset       int64            // 已同步到的复制偏移量
+	lastAckTime  time.Time        // 最近一次 REPLCONF ACK 时间（用于心跳/超时）
+	announceIp   string           // slave 对外宣告的地址（NAT）
 	announcePort int
-	capacity     uint8
+	capacity     uint8 // 能力位（slaveCapacityXxx）
 }
 
-// aofListener is currently only responsible for updating the backlog
+// replBacklog —— 命名含义：replication backlog，复制积压缓冲区。
+// 用途：环形保存最近的写命令流，slave 断线重连时据此做增量同步。
 type replBacklog struct {
-	buf           []byte
-	beginOffset   int64
-	currentOffset int64
+	buf           []byte // 命令流字节缓冲
+	beginOffset   int64  // 缓冲区起始偏移
+	currentOffset int64  // 当前写入偏移
 }
 
 func (backlog *replBacklog) appendBytes(bin []byte) {

@@ -68,8 +68,8 @@ type Listener interface {
 type Persister struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
-	db         database.DBEngine           // 存储引擎（重写/加载时用）
-	tmpDBMaker func() database.DBEngine    // 生成临时库的工厂（重写时用）
+	db         database.DBEngine        // 存储引擎（重写/加载时用）
+	tmpDBMaker func() database.DBEngine // 生成临时库的工厂（重写时用）
 	// aofChan —— 命名含义：接收待落盘命令的通道（listenCmd 从这里读）。缓冲极大(1<<20)
 	aofChan chan *payload
 	// aofFile —— AOF 文件句柄
