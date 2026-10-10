@@ -1,3 +1,8 @@
+/*
+ * Geo（地理位置）命令实现：GEOADD/GEOPOS/GEODIST/GEOHASH 等。
+ * 技巧：位置用 geohash 编码成一个 52 位整数作为 score 存进 SortedSet，
+ * 于是“附近搜索”直接复用 ZSET 的范围查询能力。
+ */
 package database
 
 import (

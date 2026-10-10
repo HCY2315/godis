@@ -1,3 +1,13 @@
+/*
+ * String（字符串）类型命令实现：SET/GET/INCR/APPEND/位操作(SETBIT...)等。
+ * 阶段定位：命令执行阶段的最底层——某条命令真正干活的地方。
+ * 统一模式（其它 list/hash/set/sortedset 同理）：
+ *   execXxx    —— 执行函数，签名 func(db, args) redis.Reply
+ *   prepareXxx —— 解析出该命令涉及的读/写 key（用于加锁和集群路由）
+ *   rollbackXxx—— 生成事务回滚的逆命令
+ *   文件末尾的 init() 用 registerCommand 把三者绑定到命令名上。
+ * string 的底层存储就是 DataEntity.Data 里的 []byte。
+ */
 package database
 
 import (

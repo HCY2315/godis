@@ -1,3 +1,8 @@
+/*
+ * List（列表）类型命令实现：LPUSH/RPUSH/LPOP/LRANGE/LINSERT 等。
+ * 底层结构是 datastruct/list.List（快速列表 QuickList）。
+ * 模式同其它命令文件：execXxx / prepareXxx / rollbackXxx + init() 注册。
+ */
 package database
 
 import (

@@ -1,3 +1,8 @@
+/*
+ * Hash（哈希）类型命令实现：HSET/HGET/HDEL/HGETALL 等。
+ * 底层结构是 datastruct/dict.Dict（此处用非并发的 SimpleDict）。
+ * 模式同其它命令文件：execXxx / prepareXxx / rollbackXxx + init() 注册。
+ */
 package database
 
 import (

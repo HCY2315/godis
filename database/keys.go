@@ -1,3 +1,8 @@
+/*
+ * 通用键命令实现：DEL/EXISTS/EXPIRE/TTL/KEYS/SCAN/TYPE/RENAME/COPY 等。
+ * 这些命令不针对某一种数据类型，而是操作“键”本身（删除、过期、遍历、改名）。
+ * 模式同其它命令文件：execXxx / prepareXxx + init() 注册。
+ */
 package database
 
 import (

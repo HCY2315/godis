@@ -1,3 +1,8 @@
+/*
+ * SortedSet（有序集合）类型命令实现：ZADD/ZRANGE/ZRANK/ZSCORE 等。
+ * 底层结构是 datastruct/sortedset.SortedSet（dict + 跳表）。
+ * 模式同其它命令文件：execXxx / prepareXxx / rollbackXxx + init() 注册。
+ */
 package database
 
 import (
