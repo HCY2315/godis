@@ -427,6 +427,7 @@ func (server *Server) GetDBSize(dbIndex int) (int, int) {
 	return db.data.Len(), db.ttlMap.Len()
 }
 
+// startReplCron —— 用途：启动复制心跳定时任务，每 10s 检查从节点/主节点状态（超时、ACK 等）。
 func (server *Server) startReplCron() {
 	go func(mdb *Server) {
 		ticker := time.Tick(time.Second * 10)

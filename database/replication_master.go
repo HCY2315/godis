@@ -420,13 +420,16 @@ func (server *Server) masterCron() {
 	}
 }
 
-// replAofListener is an implementation for aof.Listener
+// replAofListener —— 命名含义：复制用的 AOF 监听器，实现 aof.Listener。
+// 用途：每当命令写入 AOF，就把命令同时追加进 backlog 并推送给 slave，
+// 这样“落盘”和“主从同步”走同一条命令流，保证顺序一致。
 type replAofListener struct {
 	mdb         *Server
-	backlog     *replBacklog // may NOT be mdb.masterStatus.backlog
-	readyToSend bool
+	backlog     *replBacklog // 注意：可能不是 mdb.masterStatus.backlog
+	readyToSend bool         // RDB 还没发完之前不推送，避免 slave 收到超出快照的命令
 }
 
+// Callback —— 用途：AOF 写入回调。先追加进 backlog，若 RDB 已就绪则推送给 slave。
 func (listener *replAofListener) Callback(cmdLines []CmdLine) {
 	listener.mdb.masterStatus.mu.Lock()
 	for _, cmdLine := range cmdLines {
@@ -443,6 +446,7 @@ func (listener *replAofListener) Callback(cmdLines []CmdLine) {
 	}
 }
 
+// initMasterStatus —— 用途：初始化 master 复制状态（生成复制 ID、建 backlog 和各类集合）。
 func (server *Server) initMasterStatus() {
 	server.masterStatus = &masterStatus{
 		mu:           sync.RWMutex{},
