@@ -1,3 +1,7 @@
+/*
+ * 系统类命令：PING、AUTH、INFO、SELECT 等与数据无关的命令。
+ * 阶段定位：命令执行阶段的“特殊命令”，在主 Server.Exec 里直接处理（不走普通 DB 路径）。
+ */
 package database
 
 import (
@@ -12,7 +16,7 @@ import (
 	"time"
 )
 
-// Ping the server
+// Ping —— 用途：PING 命令，存活探测，返回 +PONG。
 func Ping(c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) == 0 {
 		return &protocol.PongReply{}

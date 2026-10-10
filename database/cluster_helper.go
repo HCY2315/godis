@@ -1,3 +1,7 @@
+/*
+ * 集群/事务辅助命令：单机引擎为支撑集群分布式事务(TCC)而额外暴露的内部命令。
+ * 例如 ExistIn（判断一组键里哪些已存在）、Relay 等，普通客户端一般用不到。
+ */
 package database
 
 import (
@@ -7,9 +11,8 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-// execExistIn returns existing key in given keys
-// example: ExistIn key1 key2 key3..., returns [key1, key2]
-// custom command for MSetNX tcc transaction
+// execExistIn —— 用途：返回给定 key 中“已存在”的那些。
+// 例：ExistIn key1 key2 key3 返回 [key1, key2]。供 MSetNX 的 TCC 事务使用。
 func execExistIn(db *DB, args [][]byte) redis.Reply {
 	var result [][]byte
 	for _, arg := range args {

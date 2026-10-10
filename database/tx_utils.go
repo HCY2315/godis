@@ -1,3 +1,9 @@
+/*
+ * 事务/锁相关的“公共小工具”：
+ *   readXxxKey / writeXxxKey —— 常见命令的 prepare 函数（提取读/写 key），供 registerCommand 复用
+ *   rollbackXxx              —— 常见命令的 undo 函数（生成回滚命令），供事务回滚复用
+ * 命名规律：read<n>Key 读第 n 个参数作 key；prepareSetCalculate 用于集合运算(SINTERSTORE 等)。
+ */
 package database
 
 import (
@@ -6,6 +12,7 @@ import (
 	"strconv"
 )
 
+// readFirstKey —— 用途：第一个参数是读 key（如 GET/MGET 的单 key 场景）。
 func readFirstKey(args [][]byte) ([]string, []string) {
 	// assert len(args) > 0
 	key := string(args[0])

@@ -1,3 +1,8 @@
+/*
+ * 事务(MULTI/EXEC/DISCARD/WATCH)实现。
+ * 原理：MULTI 后命令只入队不执行；EXEC 时用 WATCH 记录的键版本号做乐观锁校验，
+ * 若期间有键被改动则整个事务不执行。相关状态都挂在 connection.Connection 上。
+ */
 package database
 
 import (
@@ -6,7 +11,7 @@ import (
 	"strings"
 )
 
-// Watch set watching keys
+// Watch —— 用途：WATCH 命令，记录这些键当前的版本号，供 EXEC 时校验是否被改动。
 func Watch(db *DB, conn redis.Connection, args [][]byte) redis.Reply {
 	watching := conn.GetWatching()
 	for _, bkey := range args {
