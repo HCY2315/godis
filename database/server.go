@@ -21,25 +21,27 @@ import (
 
 var godisVersion = "1.2.8" // do not modify
 
-// Server is a redis-server with full capabilities including multiple database, rdb loader, replication
+// Server —— 命名含义：单机版 redis 服务端（存储引擎的完整实现，实现 interface/database.DB）。
+// 用途：统领多数据库、发布订阅、AOF 持久化、主从复制、慢日志等能力。
+// 说明：dbSet 用 *atomic.Value 存 *DB，是为了支持 FLUSHDB 时“整库原子替换”。
 type Server struct {
-	dbSet []*atomic.Value // *DB
+	dbSet []*atomic.Value // *DB 数组，下标即库号（默认 16 个）
 
-	// handle publish/subscribe
+	// hub —— 命名含义：发布订阅的中枢。
 	hub *pubsub.Hub
-	// handle aof persistence
+	// persister —— 命名含义：AOF 持久化器（未开启 AOF 时为 nil）。
 	persister *aof.Persister
 
-	// for replication
-	role         int32
+	// 主从复制相关状态
+	role         int32 // masterRole / slaveRole
 	slaveStatus  *slaveStatus
 	masterStatus *masterStatus
 
-	// hooks
+	// 键事件回调（供 pubsub / 集群等挂钩）
 	insertCallback database.KeyEventCallback
 	deleteCallback database.KeyEventCallback
 
-	// slow log record
+	// slogLogger —— 命名含义：slow log，慢命令记录器。
 	slogLogger *SlowLogger
 }
 
