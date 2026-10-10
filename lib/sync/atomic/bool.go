@@ -1,8 +1,9 @@
+// bool.go：原子布尔值。用于无锁的开关标志（如 Handler.closing、复制 rewriting）。
 package atomic
 
 import "sync/atomic"
 
-// Boolean is a boolean value, all actions of it is atomic
+// Boolean —— 命名含义：原子布尔，读写均线程安全。
 type Boolean uint32
 
 // Get reads the value atomically

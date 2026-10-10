@@ -1,6 +1,7 @@
+// utils.go：通用小工具。最常用的是 ToCmdLine 系列——把字符串参数转成命令格式 [][]byte。
 package utils
 
-// ToCmdLine convert strings to [][]byte
+// ToCmdLine —— 用途：把若干字符串转成命令参数 [][]byte。
 func ToCmdLine(cmd ...string) [][]byte {
 	args := make([][]byte, len(cmd))
 	for i, s := range cmd {

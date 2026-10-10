@@ -1,26 +1,3 @@
-package client
-
-import (
-	"errors"
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/sync/wait"
-	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/protocol"
-	"net"
-	"runtime/debug"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-)
-
-const (
-	created = iota
-	running
-	closed
-)
-
 /*
  * Redis 客户端（pipeline 模式）。
  * 用途：godis 作为“客户端”连接别的 godis/redis 节点，用于集群转发、主从复制等内部通信。
@@ -44,6 +21,12 @@ import (
 	"time"
 )
 
+const (
+	created = iota
+	running
+	closed
+)
+
 // Client —— 命名含义：pipeline 模式的 redis 客户端。
 type Client struct {
 	conn        net.Conn
@@ -65,11 +48,6 @@ type request struct {
 	waiting   *wait.Wait // 等待应答
 	err       error
 }
-
-const (
-	chanSize = 256
-	maxWait  = 3 * time.Second
-)
 
 const (
 	chanSize = 256
