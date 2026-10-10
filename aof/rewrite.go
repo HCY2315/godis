@@ -1,3 +1,9 @@
+/*
+ * AOF 重写：把不断变大的 AOF 文件压缩成“当前数据的最小命令集”。
+ * 阶段定位：持久化阶段的“压缩/整理”。流程：StartRewrite（暂停写入、拿快照）→
+ * DoRewrite（生成新文件，可用 RDB 前缀）→ FinishRewrite（切换文件、恢复写入）。
+ * 命名说明：RewriteCtx 保存一次重写的上下文（临时文件、大小、当前库）。
+ */
 package aof
 
 import (
@@ -11,6 +17,7 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
+// newRewriteHandler —— 用途：创建一个只用于重写的临时 Persister（绑定临时库）。
 func (persister *Persister) newRewriteHandler() *Persister {
 	h := &Persister{}
 	h.aofFilename = persister.aofFilename
@@ -18,14 +25,14 @@ func (persister *Persister) newRewriteHandler() *Persister {
 	return h
 }
 
-// RewriteCtx holds context of an AOF rewriting procedure
+// RewriteCtx —— 命名含义：一次 AOF 重写的上下文。
 type RewriteCtx struct {
-	tmpFile  *os.File // tmpFile is the file handler of aof tmpFile
-	fileSize int64
-	dbIdx    int // selected db index when startRewrite
+	tmpFile  *os.File // 重写用的临时文件句柄
+	fileSize int64    // 开始时文件大小（用于只重放增量部分）
+	dbIdx    int      // 开始重写时选中的库
 }
 
-// Rewrite carries out AOF rewrite
+// Rewrite —— 用途：完整执行一次 AOF 重写（开始→执行→结束）。
 func (persister *Persister) Rewrite() error {
 	ctx, err := persister.StartRewrite()
 	if err != nil {
@@ -40,8 +47,8 @@ func (persister *Persister) Rewrite() error {
 	return nil
 }
 
-// DoRewrite actually rewrite aof file
-// makes DoRewrite public for testing only, please use Rewrite instead
+// DoRewrite —— 用途：生成新 AOF。可选两种前缀：RDB 二进制前缀（更快加载）或 AOF 命令前缀。
+// 之所以 public 只是为了测试，正式调用请用 Rewrite。
 func (persister *Persister) DoRewrite(ctx *RewriteCtx) (err error) {
 	// start rewrite
 	if !config.Properties.AofUseRdbPreamble {
@@ -54,7 +61,7 @@ func (persister *Persister) DoRewrite(ctx *RewriteCtx) (err error) {
 	return err
 }
 
-// StartRewrite prepares rewrite procedure
+// StartRewrite —— 用途：准备重写：暂停 AOF、开临时文件、记录当前状态。
 func (persister *Persister) StartRewrite() (*RewriteCtx, error) {
 	// pausing aof
 	persister.pausingAof.Lock()

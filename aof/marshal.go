@@ -1,3 +1,7 @@
+/*
+ * 把内存里的数据实体反向序列化成 Redis 命令（AOF 重写、键迁移都用它）。
+ * 阶段定位：持久化阶段。命名规律：XxxToCmd 把某种类型转成写回该类型的命令。
+ */
 package aof
 
 import (
@@ -12,7 +16,7 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-// EntityToCmd serialize data entity to redis command
+// EntityToCmd —— 用途：把 DataEntity 按类型分派到对应的转换函数，生成重建它的命令。
 func EntityToCmd(key string, entity *database.DataEntity) *protocol.MultiBulkReply {
 	if entity == nil {
 		return nil

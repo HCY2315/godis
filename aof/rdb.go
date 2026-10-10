@@ -1,3 +1,7 @@
+/*
+ * 从存储引擎生成 RDB 快照（二进制格式，加载快、体积小）。
+ * 阶段定位：持久化阶段。用于 SAVE/BGSAVE 以及 AOF 重写的 RDB 前缀。
+ */
 package aof
 
 import (
