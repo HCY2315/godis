@@ -1,3 +1,9 @@
+/*
+ * 集群命令的分派与路由。
+ * 阶段定位：集群模式下的命令执行入口。
+ * 关键：集群里命令的执行函数签名多了一个 cluster 参数（CmdFunc），
+ * 因为需要先算出 key 属于哪个 slot、该 slot 归谁，再决定本地执行还是转发。
+ */
 package core
 
 import (
@@ -13,21 +19,23 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-// CmdLine is alias for [][]byte, represents a command line
+// CmdLine —— 命令行别名。
 type CmdLine = [][]byte
 
-// CmdFunc represents the handler of a redis command
+// CmdFunc —— 命名含义：集群命令处理函数（比单机的 ExecFunc 多一个 *Cluster 参数）。
 type CmdFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply
 
+// commands —— 集群命令表：命令名 -> CmdFunc。由 cluster/commands 包 init() 注册。
 var commands = make(map[string]CmdFunc)
 
-// RegisterCmd add command handler into cluster
+// RegisterCmd —— 用途：注册集群命令。
 func RegisterCmd(name string, cmd CmdFunc) {
 	name = strings.ToLower(name)
 	commands[name] = cmd
 }
 
-// Exec executes command on cluster
+// Exec —— 用途：集群版命令执行入口，实现 interface/database.DB。
+// 先处理 auth/ping/info 等本地命令，其余按命令名取出 CmdFunc 执行（内部再做 slot 路由）。
 func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -73,6 +81,7 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 
 }
 
+// isAuthenticated —— 用途：校验连接是否已通过密码认证。
 func isAuthenticated(c redis.Connection) bool {
 	if config.Properties.RequirePass == "" {
 		return true
@@ -84,7 +93,8 @@ func RegisterDefaultCmd(name string) {
 	RegisterCmd(name, DefaultFunc)
 }
 
-// relay command to responsible peer, and return its protocol to client
+// DefaultFunc —— 用途：默认路由函数。按 key 算 slot → 找负责节点 →
+// 若就是本节点则本地执行，否则通过 Relay 转发给对端。
 func DefaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
 	slotId := cluster.GetSlot(key)
