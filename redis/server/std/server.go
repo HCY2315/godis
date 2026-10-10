@@ -122,11 +122,12 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	}
 }
 
-// Close stops handler
+// Close —— 用途：优雅关闭。先置关闭标志拒绝新请求，再遍历关闭所有活跃连接，最后关 db。
 func (h *Handler) Close() error {
 	logger.Info("handler shutting down...")
 	h.closing.Set(true)
 	// TODO: concurrent wait
+	// 遍历 activeConn 关闭每条连接（这就是为什么要用 sync.Map 记录活跃连接）
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
 		client := key.(*connection.Connection)
 		_ = client.Close()
