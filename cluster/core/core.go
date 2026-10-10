@@ -1,3 +1,15 @@
+/*
+ * 集群核心实现（Cluster 类型）。
+ * 阶段定位：集群模式下的“命令执行阶段”。它同样实现 interface/database.DB，
+ * 但执行命令前会先根据 key 算出所属 slot，再路由到负责该 slot 的节点；
+ * 若目标就是本节点则落到本地 db，否则通过内部客户端转发给对端。
+ * 命名说明：
+ *   raftNode        —— 集群元数据的一致性存储（slot 归属、节点列表等走 raft 复制）
+ *   slotsManager    —— slot 与节点的映射管理
+ *   rebalanceManger —— 负载均衡/迁移管理
+ *   transactions    —— 分布式事务(TCC)管理
+ *   replicaManager  —— 集群内副本管理
+ */
 package core
 
 import (
@@ -12,37 +24,40 @@ import (
 	rdbcore "github.com/hdt3213/rdb/core"
 )
 
+// Cluster —— 命名含义：集群节点。
 type Cluster struct {
-	raftNode    *raft.Node
-	db          database.DBEngine
-	connections ConnectionFactory
+	raftNode    *raft.Node     // raft 一致性节点
+	db          database.DBEngine // 本地存储引擎（单机 Server）
+	connections ConnectionFactory // 节点间连接的工厂
 	config      *Config
 
-	slotsManager    *slotsManager
-	rebalanceManger *rebalanceManager
-	transactions    *TransactionManager
-	replicaManager  *replicaManager
+	slotsManager    *slotsManager      // slot 分配
+	rebalanceManger *rebalanceManager  // 迁移/均衡
+	transactions    *TransactionManager // 分布式事务
+	replicaManager  *replicaManager    // 副本管理
 
 	closeChan chan struct{}
 
-	// allow inject route implementation
+	// 路由实现可注入（测试时替换）；默认见 defaultGetSlotImpl / defaultPickNodeImpl
 	getSlotImpl  func(key string) uint32
 	pickNodeImpl func(slotID uint32) string
-	id_          string // for tests only
+	id_          string // 仅测试用
 
-	// slow log record
+	// 慢日志
 	slogLogger *dbimpl.SlowLogger
 }
 
+// Config —— 命名含义：集群启动配置（内嵌 raft 配置 + 加入集群相关参数）。
 type Config struct {
 	raft.RaftConfig
-	StartAsSeed    bool
-	JoinAddress    string
-	Master         string
-	connectionStub ConnectionFactory // for test
-	noCron         bool              // for test
+	StartAsSeed    bool   // 是否作为种子引导新集群
+	JoinAddress    string // 加入集群时联系的seed地址
+	Master         string // 以副本身份加入时指向的主节点
+	connectionStub ConnectionFactory // 测试用
+	noCron         bool              // 测试用：不启动后台定时任务
 }
 
+// SelfID —— 用途：返回本节点 ID（优先取 raft 配置里的）。
 func (c *Cluster) SelfID() string {
 	if c.raftNode == nil {
 		return c.id_
@@ -50,6 +65,8 @@ func (c *Cluster) SelfID() string {
 	return c.raftNode.Cfg.ID()
 }
 
+// NewCluster —— 用途：创建集群节点：建本地 db、启动 raft、初始化各管理器，
+// 然后根据是否已有本地状态决定“引导新集群 / 加入已有集群 / 作为副本加入”。
 func NewCluster(cfg *Config) (*Cluster, error) {
 	var connections ConnectionFactory
 	if cfg.connectionStub != nil {

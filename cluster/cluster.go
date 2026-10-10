@@ -1,4 +1,10 @@
-// Package cluster provides a server side cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster
+/*
+ * 集群入口。
+ * 特点：这是一个“服务端集群”，对客户端透明——连任意节点都能访问全集群的数据。
+ * 阶段定位：集群模式下的启动阶段（main.go 里 cluster-enable 打开时走这里）。
+ * 组成：底层的分布式一致由 raft 提供；数据按 16384 个 slot 分片；节点间用内部命令通信。
+ * 命名说明：Cluster 是 core.Cluster 的别名，MakeCluster 是构造+启动函数。
+ */
 package cluster
 
 import (
@@ -14,7 +20,8 @@ import (
 
 type Cluster = core.Cluster
 
-// MakeCluster creates and starts a node of cluster
+// MakeCluster —— 用途：用当前配置创建并启动一个集群节点。
+// 若没有本地状态：作为种子节点则引导全新集群，否则向种子节点发起加入请求。
 func MakeCluster() *Cluster {
 	raftPath := path.Join(config.Properties.Dir, "raft")
 	err := os.MkdirAll(raftPath, os.ModePerm)
