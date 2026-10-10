@@ -1,3 +1,4 @@
+// fsm_utils.go：状态机(FSM)的只读查询与辅助方法，供路由、迁移逻辑读取集群地图。
 package raft
 
 import (
@@ -5,7 +6,7 @@ import (
 	"sort"
 )
 
-// PickNode returns node hosting slot, ignore migrating
+// PickNode —— 用途：返回负责某 slot 的节点（忽略迁移中的临时状态）。
 func (fsm *FSM) PickNode(slot uint32) string {
 	fsm.mu.RLock()
 	defer fsm.mu.RUnlock()

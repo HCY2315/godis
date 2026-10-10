@@ -1,3 +1,9 @@
+/*
+ * 集群分布式事务（TCC：Try-Confirm-Cancel）。
+ * 阶段定位：集群命令执行阶段中“跨节点多键命令”（如 MSET 落在不同节点）的一致性保障。
+ * 原理：Try 阶段在各节点预执行，全部成功则 Confirm，任一失败则 Cancel 回滚。
+ * 命名说明：TransactionManager 事务管理器；TCC 保存一次分布式事务的状态。
+ */
 package core
 
 import (
@@ -11,9 +17,10 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-// transaction info will be deleted after transactionTTL since commit
+// transactionTTL —— 事务信息在提交后保留多久（到期清理）。
 const transactionTTL = time.Minute
 
+// TransactionManager —— 命名含义：分布式事务管理器。
 type TransactionManager struct {
 	txs map[string]*TCC
 	mu  sync.RWMutex

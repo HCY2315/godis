@@ -1,3 +1,7 @@
+/*
+ * 集群公共工具：slot 计算、内部命令（如获取 raft 已提交位置）等。
+ * 命名说明：slot 是 key 的归属分片，godis 用 1024 个 slot（Redis 用 16384）。
+ */
 package core
 
 import (
@@ -12,6 +16,7 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
+// SlotCount —— 命名含义：slot 总数（key 按 CRC32 映射到其中某个 slot）。
 const SlotCount int = 1024
 
 const getCommittedIndexCommand = "raft.committedindex"
