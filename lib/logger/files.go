@@ -1,3 +1,4 @@
+// files.go：日志文件相关工具（检查存在/权限、创建目录、按时间戳取名等）。
 package logger
 
 import (
@@ -5,6 +6,7 @@ import (
 	"os"
 )
 
+// checkNotExist —— 用途：判断路径是否不存在。
 func checkNotExist(src string) bool {
 	_, err := os.Stat(src)
 	return os.IsNotExist(err)

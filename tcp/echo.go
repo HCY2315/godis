@@ -1,8 +1,8 @@
-package tcp
-
-/**
- * A echo server to test whether the server is functioning normally
+/*
+ * 一个回显(echo)服务，仅用于测试 tcp 框架是否正常。
+ * 它实现 tcp.Handler：把收到的字节原样写回。
  */
+package tcp
 
 import (
 	"bufio"

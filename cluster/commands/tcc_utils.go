@@ -26,8 +26,8 @@ func getRouteMap(cluster *core.Cluster, keys []string) RouteMap {
 
 type TccTx struct {
 	rawCmdLine CmdLine
-	routeMap RouteMap
-	cmdLines map[string]CmdLine // node -> CmdLine
+	routeMap   RouteMap
+	cmdLines   map[string]CmdLine // node -> CmdLine
 }
 
 // execute tcc

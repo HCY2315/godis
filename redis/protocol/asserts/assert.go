@@ -1,3 +1,4 @@
+// asserts 包：测试断言工具，供各包的单测校验 redis.Reply 是否符合预期。
 package asserts
 
 import (
@@ -9,7 +10,7 @@ import (
 	"testing"
 )
 
-// AssertIntReply checks if the given redis.Reply is the expected integer
+// AssertIntReply —— 用途：断言回复是期望的整数。
 func AssertIntReply(t *testing.T, actual redis.Reply, expected int) {
 	intResult, ok := actual.(*protocol.IntReply)
 	if !ok {

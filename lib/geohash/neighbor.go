@@ -1,3 +1,4 @@
+// neighbor.go：地理坐标的距离计算与邻域网格，用于 GEODIST 与“附近搜索”。
 package geohash
 
 import "math"

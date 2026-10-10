@@ -1,3 +1,4 @@
+// tests.go：集群测试辅助——用内存连接工厂构造多节点集群（节点间通过本地函数调用通信）。
 package core
 
 import (
@@ -6,7 +7,7 @@ import (
 	dbimpl "github.com/hdt3213/godis/database"
 )
 
-// MakeTestCluster creates a cluster for test, which communications are done through local function calls.
+// MakeTestCluster —— 用途：按给定节点 ID 创建一组互联的测试集群。
 func MakeTestCluster(ids []string) map[string]*Cluster {
 	nodes := make(map[string]*Cluster)
 	connections := NewInMemConnectionFactory()

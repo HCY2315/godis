@@ -1,3 +1,5 @@
+// connection_inmem.go：内存内连接工厂（测试用）。
+// 节点间不做真实网络通信，而是直接调用同进程内另一个 Cluster 的命令函数，便于集群单测。
 package core
 
 import (
@@ -8,8 +10,9 @@ import (
 	"github.com/hdt3213/godis/redis/parser"
 )
 
+// InMemConnectionFactory —— 命名含义：内存连接工厂，实现 ConnectionFactory（测试用）。
 type InMemConnectionFactory struct {
-	nodes map[string]*Cluster
+	nodes map[string]*Cluster // 节点 ID -> 节点
 	mu    sync.Mutex
 }
 
