@@ -91,17 +91,21 @@ func (p *ServerProperties) RaftAnnounceAddress() string {
 	return p.RaftListenAddr
 }
 
-// Properties holds global config properties
+// Properties —— 命名含义：全局配置单例。
+// 用途：整个程序通过 config.Properties.XXX 读取配置，避免层层传参。
 var Properties *ServerProperties
+
+// EachTimeServerInfo —— 命名含义：每次运行的服务器信息（不随 flush 重置）。
+// 用途：目前记录启动时间，供 INFO 命令展示 uptime。
 var EachTimeServerInfo *ServerInfo
 
 func init() {
-	// A few stats we don't want to reset: server startup time, and peak mem.
+	// 启动时间等统计信息不应该被 flush/reset 清掉
 	EachTimeServerInfo = &ServerInfo{
 		StartUpTime: time.Now(),
 	}
 
-	// default config
+	// 【默认配置】没有配置文件时使用（默认面向本机 6379）
 	Properties = &ServerProperties{
 		Bind:       "127.0.0.1",
 		Port:       6379,
@@ -110,10 +114,14 @@ func init() {
 	}
 }
 
+// parse —— 用途：把配置文件的文本解析成 ServerProperties。
+// 实现分两步：1) 逐行按空格切成 key/value 存进 rawMap；2) 用反射遍历结构体字段，
+// 依据 `cfg:"..."` tag 把字符串值按字段类型（string/int/bool/slice）set 进去。
+// 这也是为什么新增配置项“只需给结构体加字段和 tag”。
 func parse(src io.Reader) *ServerProperties {
 	config := &ServerProperties{}
 
-	// read config file
+	// 第一步：读取文件，跳过注释行，按第一个空格切成 key / value
 	rawMap := make(map[string]string)
 	scanner := bufio.NewScanner(src)
 	for scanner.Scan() {
@@ -132,7 +140,7 @@ func parse(src io.Reader) *ServerProperties {
 		logger.Fatal(err)
 	}
 
-	// parse format
+	// 第二步：反射按 tag 填充字段（支持 string/int/int64/bool/[]string）
 	t := reflect.TypeOf(config)
 	v := reflect.ValueOf(config)
 	n := t.Elem().NumField()
@@ -173,7 +181,7 @@ func parse(src io.Reader) *ServerProperties {
 	return config
 }
 
-// SetupConfig read config file and store properties into Properties
+// SetupConfig —— 用途：读取指定配置文件并填充全局 Properties，同时生成新的 RunID。
 func SetupConfig(configFilename string) {
 	file, err := os.Open(configFilename)
 	if err != nil {
@@ -191,6 +199,7 @@ func SetupConfig(configFilename string) {
 	}
 }
 
+// GetTmpDir —— 用途：返回临时目录（AOF 重写、RDB 生成等临时文件都放这）。
 func GetTmpDir() string {
 	return Properties.Dir + "/tmp"
 }
