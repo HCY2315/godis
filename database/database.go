@@ -13,6 +13,9 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
+// 字典分片数：传给 dict.MakeConcurrent 作为“初始分片数”（内部会向上取整到 2 的幂）。
+// dataDictSize = 65536 个分片，按估算的最大 key 数设置，分片越多锁冲突越少、并发越高；
+// ttlDictSize  = 1024 个分片，因为有过期时间的 key 通常远少于总 key 数，用小一点省内存。
 const (
 	dataDictSize = 1 << 16
 	ttlDictSize  = 1 << 10
@@ -53,18 +56,28 @@ type CmdLine = [][]byte
 // execute from head to tail when undo
 type UndoFunc func(db *DB, args [][]byte) []CmdLine
 
-// makeDB create DB instance
+// makeDB —— 命名含义：创建一个数据库实例（带完整能力）。
+// 用途：每个 DB 都由三张并发哈希表 + 一个 AOF 回调和若干键事件回调组成：
+//   - data       主数据表：真正存 key -> *DataEntity；
+//   - ttlMap     过期表：key -> 到期时间，配合 timewheel 实现过期删除；
+//   - versionMap 版本表：key -> 版本号，WATCH/EXEC 的乐观锁依据；
+//   - addAof     写命令落 AOF 的函数，此处先给一个空实现（未开启 AOF 时就是空函数，
+//     开启后在 bindPersister 里被替换成真正的持久化调用）。
+//
+// 注意：三张表各自独立分片，浅并行；它们之间不做事务保证，一致性由“按 key 加锁”保证。
 func makeDB() *DB {
 	db := &DB{
 		data:       dict.MakeConcurrent(dataDictSize),
 		ttlMap:     dict.MakeConcurrent(ttlDictSize),
 		versionMap: dict.MakeConcurrent(dataDictSize),
-		addAof:     func(line CmdLine) {},
+		addAof:     func(line CmdLine) {}, // 空 AOF 回调（占位，开启持久化后被替换）
 	}
 	return db
 }
 
-// makeBasicDB create DB instance only with basic abilities.
+// makeBasicDB —— 命名含义：只带基本能力的 DB，供 AOF 重写等临时场景使用。
+// 与 makeDB 的区别：不挂插入/删除回调（不参与 pubsub、集群迁移等），更轻量；
+// 由 MakeAuxiliaryServer 使用，用一个空库来承载重写期间的数据。
 func makeBasicDB() *DB {
 	db := &DB{
 		data:       dict.MakeConcurrent(dataDictSize),

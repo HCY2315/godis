@@ -27,6 +27,10 @@ type shard struct {
 	mutex sync.RWMutex
 }
 
+// computeCapacity —— 命名含义：计算实际分片容量。
+// 用途：把调用方给的期望分片数向上取整到最近的“2 的幂”（最小 16）。
+// 为什么必须是 2 的幂：spread() 里用 (len-1) & hashCode 取模，只有 2 的幂才能
+// 用位与代替取模，既快又分布均匀。这段位移或运算就是经典的“向上取整到 2 的幂”技巧。
 func computeCapacity(param int) (size int) {
 	if param <= 16 {
 		return 16
@@ -43,9 +47,14 @@ func computeCapacity(param int) (size int) {
 	return n + 1
 }
 
-// MakeConcurrent creates ConcurrentDict with the given shard count
+// MakeConcurrent —— 命名含义：创建一个并发字典。
+// 用途：按给定“期望分片数”建好分片表，每个分片是一个独立的 map + RWMutex，
+// 之后读写时按 key 哈希到某个分片，只锁那一片，从而让不同 key 的访问互不阻塞。
+// 参数 shardCount 是期望值，内部会被 computeCapacity 规整成 2 的幂。
+// 特例：shardCount==1 时不分片（spread 恒返回 0），用于确定单分片/便于测试的场景。
 func MakeConcurrent(shardCount int) *ConcurrentDict {
 	if shardCount == 1 {
+		// 单分片：整张表一把锁，spread 恒为 0
 		table := []*shard{
 			{
 				m: make(map[string]interface{}),
@@ -57,6 +66,7 @@ func MakeConcurrent(shardCount int) *ConcurrentDict {
 			shardCount: shardCount,
 		}
 	}
+	// 把期望分片数规整成 2 的幂，再依次创建各分片
 	shardCount = computeCapacity(shardCount)
 	table := make([]*shard, shardCount)
 	for i := 0; i < shardCount; i++ {
