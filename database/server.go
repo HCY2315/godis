@@ -72,17 +72,27 @@ func NewStandaloneServer() *Server {
 		server.dbSet[i] = holder
 	}
 	server.hub = pubsub.MakeHub()
-	// record aof
-	validAof := false
+
+	// ========== AOF 初始化（持久化阶段）==========
+	// AOF 思路：把“写命令”本身追加到文件，重启时重放命令即可恢复数据。
+	// 这里做两件事：1) 若已有 AOF 文件，先重放它加载历史数据；2) 把每个 DB 的写命令接到 AOF。
+	validAof := false // 记录“本次是否已通过 AOF 恢复了数据”，用于决定要不要再读 RDB
 	if config.Properties.AppendOnly {
+		// 文件已存在说明有历史数据可重放（首次启动则为新建）
 		validAof = fileExists(config.Properties.AppendFilename)
+		// NewPersister 第 3 个参数 load=true：构造时会立刻 LoadAof() 重放已有 AOF。
+		// 它内部会：打开/创建 AOF 文件 -> 起后台 goroutine 串行写盘 -> 视策略每秒 fsync。
 		aofHandler, err := NewPersister(server,
 			config.Properties.AppendFilename, true, config.Properties.AppendFsync)
 		if err != nil {
 			panic(err)
 		}
+		// bindPersister：把每个 DB 的 addAof 回调接到 aofHandler，
+		// 此后每次写命令都会经 db.addAof -> persister.SaveCmdLine 追加进 AOF 文件。
 		server.bindPersister(aofHandler)
 	}
+	// RDB 加载条件：配置了 RDB 文件，且“没有有效的 AOF”。
+	// 因为 AOF 通常比 RDB 更新，若两者都存在，以 AOF 为准，跳过 RDB，避免用旧快照覆盖新数据。
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
 		err := server.loadRdbFile()
