@@ -98,6 +98,8 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 	})
 }
 
+// NewPersister —— 用途：包装 aof.NewPersister，并注入“临时库工厂”。
+// 临时库（MakeAuxiliaryServer）在 AOF 重写时用来承载快照数据，所以需要数据库包提供一个构造方式。
 func NewPersister(db database.DBEngine, filename string, load bool, fsync string) (*aof.Persister, error) {
 	return aof.NewPersister(db, filename, load, fsync, func() database.DBEngine {
 		return MakeAuxiliaryServer()

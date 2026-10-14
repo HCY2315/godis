@@ -38,13 +38,21 @@ const (
 	aofQueueSize = 1 << 20
 )
 
-// AOF 落盘策略。
+/*
+ * AOF 落盘策略（对应配置 appendfsync）。
+ * 背景：file.Write() 只是写进操作系统的页缓存(内存)，不等于落盘；file.Sync()(即 fsync)
+ * 才强制刷到物理磁盘。区别在于何时调用这个较慢的 fsync：
+ *   always   —— 每条写命令后都 fsync（同步）。进程崩、断电都不丢，但每条命令都要等磁盘，最慢。
+ *   everysec —— 后台每秒 fsync 一次。性能接近不刷盘，崩溃最多丢约 1 秒的写命令（推荐默认）。
+ *   no       —— 从不主动 fsync，交给 OS 决定。最快，但断电可能丢较多数据。
+ * 注意：进程崩溃时三种都不会丢（数据还在 OS 缓存）；fsync 主要防的是断电/系统崩溃。
+ */
 const (
-	// FsyncAlways —— 每条命令都 fsync，最安全但最慢（性能杀手）。
+	// FsyncAlways —— 每条命令都 fsync：最安全，但受磁盘 IOPS 限制，是性能杀手。
 	FsyncAlways = "always"
-	// FsyncEverySec —— 每秒 fsync 一次，性能与安全的折中。
+	// FsyncEverySec —— 每秒 fsync 一次：性能与安全的折中（Redis 默认）。
 	FsyncEverySec = "everysec"
-	// FsyncNo —— 交给操作系统决定何时 fsync。
+	// FsyncNo —— 交给操作系统决定何时 fsync：最快，最不安全。
 	FsyncNo = "no"
 )
 
@@ -70,6 +78,7 @@ type Persister struct {
 	cancel     context.CancelFunc
 	db         database.DBEngine        // 存储引擎（重写/加载时用）
 	tmpDBMaker func() database.DBEngine // 生成临时库的工厂（重写时用）
+	//1<<20	1,048,576	1 Mi ≈ 100 万
 	// aofChan —— 命名含义：接收待落盘命令的通道（listenCmd 从这里读）。缓冲极大(1<<20)
 	aofChan chan *payload
 	// aofFile —— AOF 文件句柄
@@ -89,7 +98,17 @@ type Persister struct {
 	buffer []CmdLine
 }
 
-// NewPersister creates a new aof.Persister
+// NewPersister —— 用途：创建一个 AOF 持久化器，是启用 AOF 的入口。
+// 参数：
+//
+//	db          存储引擎（加载时重放命令、重写时用）
+//	filename    AOF 文件路径
+//	load        true=构造时立即重放已有 AOF 恢复数据（启动时用 true）
+//	fsync       落盘策略：always/everysec/no
+//	tmpDBMaker  生成临时库的工厂（AOF 重写时用）
+//
+// 流程：先（可选）LoadAof 重放旧命令 → 以追加方式打开文件 → 起后台 goroutine 串行写盘 →
+// 若是 everysec 策略再起一个每秒 fsync 的定时任务。
 func NewPersister(db database.DBEngine, filename string, load bool, fsync string, tmpDBMaker func() database.DBEngine) (*Persister, error) {
 	persister := &Persister{}
 	persister.aofFilename = filename
@@ -97,19 +116,20 @@ func NewPersister(db database.DBEngine, filename string, load bool, fsync string
 	persister.db = db
 	persister.tmpDBMaker = tmpDBMaker
 	persister.currentDB = 0
-	// load aof file if needed
+	// 【加载阶段】重放已有 AOF：把文件里的命令逐条 db.Exec 一遍，恢复全部数据
 	if load {
 		persister.LoadAof(0)
 	}
+	// 以“追加 + 创建 + 读写”方式打开文件（不存在则新建）
 	aofFile, err := os.OpenFile(persister.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
 	persister.aofFile = aofFile
-	persister.aofChan = make(chan *payload, aofQueueSize)
+	persister.aofChan = make(chan *payload, aofQueueSize) // 写命令的异步队列
 	persister.aofFinished = make(chan struct{})
 	persister.listeners = make(map[Listener]struct{})
-	// start aof goroutine to write aof file in background and fsync periodically if needed (see fsyncEverySecond)
+	// 【写入阶段】后台 goroutine：从 aofChan 取命令并串行写入文件（见 listenCmd/writeAof）
 	go func() {
 		persister.listenCmd()
 	}()
@@ -201,16 +221,20 @@ func (persister *Persister) writeAof(p *payload) {
 // 只能在 listenCmd 启动前调用。文件开头可能是一段 RDB（混合持久化），先按 RDB 解析，
 // 失败则从头按命令流解析。
 func (persister *Persister) LoadAof(maxBytes int) {
-	// persister.db.Exec may call persister.AddAof
-	// delete aofChan to prevent loaded commands back into aofChan
+	// 【步骤1】临时把 aofChan 置 nil：
+	// 重放命令会调用 persister.db.Exec，而 Exec 又可能触发 db.addAof -> SaveCmdLine；
+	// 若 aofChan 还在，就会把“正在加载的命令”又写回 AOF 造成重复。置 nil 后 SaveCmdLine 直接返回。
+	// defer 保证函数结束时恢复该 channel（此后进入正常写盘阶段）。
 	aofChan := persister.aofChan
 	persister.aofChan = nil
 	defer func(aofChan chan *payload) {
 		persister.aofChan = aofChan
 	}(aofChan)
 
+	// 【步骤2】以只读方式打开 AOF 文件
 	file, err := os.Open(persister.aofFilename)
 	if err != nil {
+		// 首次启动文件不存在(PathError)：没有历史数据，直接返回
 		if _, ok := err.(*os.PathError); ok {
 			return
 		}
@@ -219,28 +243,36 @@ func (persister *Persister) LoadAof(maxBytes int) {
 	}
 	defer file.Close()
 
-	// load rdb preamble if needed
+	// 【步骤3】先尝试把文件开头当作 RDB 解析（混合持久化的 RDB 前缀）
 	decoder := rdb.NewDecoder(file)
 	err = persister.db.LoadRDB(decoder)
 	if err != nil {
-		// no rdb preamble
+		// 不是 RDB 前缀（纯命令流）：把读指针拨回文件开头，从头按命令流解析
 		file.Seek(0, io.SeekStart)
 	} else {
-		// has rdb preamble
+		// 确实是 RDB 前缀：跳过已消费的 RDB 部分，从后面的命令流继续
+		// +1 是跳过 RDB 结尾的分隔字节；并相应减少本次允许读取的字节数
 		_, _ = file.Seek(int64(decoder.GetReadCount())+1, io.SeekStart)
 		maxBytes = maxBytes - decoder.GetReadCount()
 	}
+
+	// 【步骤4】确定命令流的读取范围：
+	// maxBytes>0 表示只加载文件前 maxBytes 字节（AOF 重写增量场景）；否则读整个文件
 	var reader io.Reader
 	if maxBytes > 0 {
 		reader = io.LimitReader(file, int64(maxBytes))
 	} else {
 		reader = file
 	}
+
+	// 【步骤5】把 reader 解析成一条条命令（channel 方式异步产出）
 	ch := parser.ParseStream(reader)
+	// fakeConn：重放时只需要用它承载“当前选中哪个库(SELECT)”，不是真实客户端连接
 	fakeConn := connection.NewFakeConn() // only used for save dbIndex
+	// 【步骤6】逐条取出命令并重放
 	for p := range ch {
 		if p.Err != nil {
-			if p.Err == io.EOF {
+			if p.Err == io.EOF { // 正常读完，结束
 				break
 			}
 			logger.Error("parse error: " + p.Err.Error())
@@ -250,15 +282,19 @@ func (persister *Persister) LoadAof(maxBytes int) {
 			logger.Error("empty payload")
 			continue
 		}
+		// 命令必须是多批量协议
 		r, ok := p.Data.(*protocol.MultiBulkReply)
 		if !ok {
 			logger.Error("require multi bulk protocol")
 			continue
 		}
+		// 【步骤6.1】真正重放：交给存储引擎执行这条命令，效果等同于当初执行它
 		ret := persister.db.Exec(fakeConn, r.Args)
 		if protocol.IsErrorReply(ret) {
 			logger.Error("exec err", string(ret.ToBytes()))
 		}
+		// 【步骤6.2】维护当前库号：文件里用 SELECT 命令切换库，这里同步记录，
+		// 因为后续继续写 AOF 时需要知道从哪个库接着写
 		if strings.ToLower(string(r.Args[0])) == "select" {
 			// execSelect success, here must be no error
 			dbIndex, err := strconv.Atoi(string(r.Args[1]))
@@ -269,7 +305,7 @@ func (persister *Persister) LoadAof(maxBytes int) {
 	}
 }
 
-// Fsync flushes aof file to disk
+// Fsync —— 用途：把 AOF 文件从 OS 页缓存刷到物理磁盘（everysec/no 策略会调用它）。
 func (persister *Persister) Fsync() {
 	persister.pausingAof.Lock()
 	if err := persister.aofFile.Sync(); err != nil {
@@ -294,7 +330,8 @@ func (persister *Persister) Close() {
 	persister.cancel()
 }
 
-// fsyncEverySecond fsync aof file every second
+// fsyncEverySecond —— 用途：everysec 策略的定时器，每秒 fsync 一次。
+// 对性能影响很小（一次/秒），代价是崩溃时最多丢约 1 秒的写命令。
 func (persister *Persister) fsyncEverySecond() {
 	ticker := time.NewTicker(time.Second)
 	go func() {

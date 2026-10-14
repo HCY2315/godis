@@ -40,7 +40,7 @@ type ServerProperties struct {
 	// —— 持久化：AOF / RDB ——
 	AppendOnly        bool   `cfg:"appendonly"`           // 是否开启 AOF
 	AppendFilename    string `cfg:"appendfilename"`       // AOF 文件名
-	AppendFsync       string `cfg:"appendfsync"`          // 落盘策略：always/everysec
+	AppendFsync       string `cfg:"appendfsync"`          // 落盘策略：always(每条命令fsync,最安全最慢)/everysec(每秒fsync,推荐)/no(交给OS)
 	AofUseRdbPreamble bool   `cfg:"aof-use-rdb-preamble"` // 重写 AOF 时是否用 RDB 做前缀
 	RDBFilename       string `cfg:"dbfilename"`           // RDB 文件名
 

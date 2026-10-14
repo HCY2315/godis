@@ -76,7 +76,7 @@ func NewStandaloneServer() *Server {
 	// ========== AOF 初始化（持久化阶段）==========
 	// AOF 思路：把“写命令”本身追加到文件，重启时重放命令即可恢复数据。
 	// 这里做两件事：1) 若已有 AOF 文件，先重放它加载历史数据；2) 把每个 DB 的写命令接到 AOF。
-	validAof := false // 记录“本次是否已通过 AOF 恢复了数据”，用于决定要不要再读 RDB
+	validAof := false // 记录“AOF 文件是否已存在”，用于决定要不要再读 RDB
 	if config.Properties.AppendOnly {
 		// 文件已存在说明有历史数据可重放（首次启动则为新建）
 		validAof = fileExists(config.Properties.AppendFilename)
