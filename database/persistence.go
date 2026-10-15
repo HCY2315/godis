@@ -45,39 +45,41 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 		var entity *database.DataEntity
 		switch o.GetType() {
 		case rdb.StringType:
+			// String：RDB 的 StringObject.Value 是 []byte
 			str := o.(*rdb.StringObject)
 			entity = &database.DataEntity{
-				Data: str.Value,
+				Data: str.Value, // 字符串值直接用 []byte
 			}
 		case rdb.ListType:
+			// List：Values 是 [][]byte（按顺序）
 			listObj := o.(*rdb.ListObject)
 			list := List.NewQuickList()
 			for _, v := range listObj.Values {
-				list.Add(v)
+				list.Add(v) // 每个元素作为 []byte 加入 quicklist
 			}
 			entity = &database.DataEntity{
-				Data: list,
+				Data: list, // 内存结构：QuickList
 			}
 		case rdb.HashType:
-			// 从 RDB 解析出的 HashObject 转成 godis 内存结构
-			// hashObj.Hash 是 map[string][]byte（从 RDB 解码器得到）
+			// Hash：HashObject.Hash 是 map[string][]byte
 			hashObj := o.(*rdb.HashObject)
-			// MakeSimple 创建一个“简易”字典：非并发安全，用于单线程恢复场景
-			hash := dict.MakeSimple()
+			hash := dict.MakeSimple() // 简易字典（单线程恢复）
 			for k, v := range hashObj.Hash {
-				hash.Put(k, v) // 将字段 k-v 塞进内存字典
+				hash.Put(k, v)
 			}
 			entity = &database.DataEntity{
-				Data: hash, // DataEntity.Data 保存内存数据结构（此处是 dict.Dict 实现）
+				Data: hash, // 内存结构：dict.Dict
 			}
 		case rdb.SetType:
+			// Set：SetObject.Members 是 [][]byte
 			setObj := o.(*rdb.SetObject)
 			set := HashSet.Make()
 			for _, mem := range setObj.Members {
+				// 注意：Set 的成员在 RDB 里是 []byte，这里转成 string 存入 HashSet
 				set.Add(string(mem))
 			}
 			entity = &database.DataEntity{
-				Data: set,
+				Data: set, // 内存结构：HashSet（底层是 dict）
 			}
 		case rdb.ZSetType:
 			zsetObj := o.(*rdb.ZSetObject)
