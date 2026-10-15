@@ -35,7 +35,7 @@ var ClientCounter int32
 // ListenAndServeWithSignal —— 用途：绑定端口并在收到退出信号（SIGHUP/INT/TERM...）时优雅关闭。
 func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 	closeChan := make(chan struct{})
-	sigCh := make(chan os.Signal)
+	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-sigCh
