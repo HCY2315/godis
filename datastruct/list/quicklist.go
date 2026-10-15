@@ -59,26 +59,41 @@ func NewQuickList() *QuickList {
 	return l
 }
 
-// Add adds value to the tail
+// Add 向 quicklist 尾部追加一个元素（对应 RPUSH）。
+//
+// 结构组装思路：两级结构
+// - 外层：container/list 双向链表（ql.data），每个节点（*list.Element）代表“一页”
+// - 内层：节点的 Value 是 []interface{}，存放这一页的元素
+// - size：统计所有元素总数
 func (ql *QuickList) Add(val interface{}) {
-	ql.size++
-	if ql.data.Len() == 0 { // empty list
-		page := make([]interface{}, 0, pageSize)
-		page = append(page, val)
-		ql.data.PushBack(page)
+	ql.size++ // 元素总数 +1
+
+	if ql.data.Len() == 0 {
+		// 【场景1】列表为空：还没有任何页，新建第一页并放入元素
+		page := make([]interface{}, 0, pageSize) // cap=pageSize（1024），len=0
+		page = append(page, val)                 // 填第一个元素
+		ql.data.PushBack(page)                   // 把这一页挂到外层链表尾部
 		return
 	}
-	// assert list.data.Back() != nil
+
+	// 【场景2/3】列表已有页，取最后一页
+	// list.data.Back() 返回外层链表尾部节点
 	backNode := ql.data.Back()
+	// 节点.Value 存的是 []interface{}，断言成页
 	backPage := backNode.Value.([]interface{})
-	if len(backPage) == cap(backPage) { // full page, create new page
+
+	if len(backPage) == cap(backPage) {
+		// 【场景2】尾页已满：len == cap，建新页追加
 		page := make([]interface{}, 0, pageSize)
 		page = append(page, val)
-		ql.data.PushBack(page)
+		ql.data.PushBack(page) // 新页加入链表尾部
 		return
 	}
-	// append into page
+
+	// 【场景3】尾页未满：直接往该页追加
+	// 注意：append 可能返回新切片头（底层数组换了、或len/cap变化）
 	backPage = append(backPage, val)
+	// 必须把新的切片头写回节点 Value，否则链表里仍是旧切片
 	backNode.Value = backPage
 }
 
