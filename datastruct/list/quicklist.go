@@ -33,26 +33,28 @@ type QuickList struct {
 }
 
 // list 的使用备注
-// type List struct {
-//	root Element // 哨兵节点，本身不存数据；只用到 &root、root.prev、root.next
-//	len  int     // 真实元素个数（不含哨兵）
-//}
 //
-//type Element struct {
-//	next, prev *Element // 前后指针
-//	list *List          // 所属链表
-//	Value any           // 存的值（QuickList 里存 []interface{} 一页）
-//}
+//	type List struct {
+//		root Element // 哨兵节点，本身不存数据；只用到 &root、root.prev、root.next
+//		len  int     // 真实元素个数（不含哨兵）
+//	}
+//
+//	type Element struct {
+//		next, prev *Element // 前后指针
+//		list *List          // 所属链表
+//		Value any           // 存的值（QuickList 里存 []interface{} 一页）
+//	}
+//
 // iterator of QuickList, move between [-1, ql.Len()]
 type iterator struct {
-	node   *list.Element // 当前所在的那一页（外层链表节点）
+	node   *list.Element // 当前所在的那一页
 	offset int           // 页内下标（第几个元素）
 	ql     *QuickList    // 回指整个列表
 }
 
 func NewQuickList() *QuickList {
 	l := &QuickList{
-		data: list.New(), // 生成一个循环双向链表，
+		data: list.New(), // 生成一个新的循环双向链表，
 	}
 	return l
 }
