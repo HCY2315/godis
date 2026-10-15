@@ -59,13 +59,16 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 				Data: list,
 			}
 		case rdb.HashType:
+			// 从 RDB 解析出的 HashObject 转成 godis 内存结构
+			// hashObj.Hash 是 map[string][]byte（从 RDB 解码器得到）
 			hashObj := o.(*rdb.HashObject)
+			// MakeSimple 创建一个“简易”字典：非并发安全，用于单线程恢复场景
 			hash := dict.MakeSimple()
 			for k, v := range hashObj.Hash {
-				hash.Put(k, v)
+				hash.Put(k, v) // 将字段 k-v 塞进内存字典
 			}
 			entity = &database.DataEntity{
-				Data: hash,
+				Data: hash, // DataEntity.Data 保存内存数据结构（此处是 dict.Dict 实现）
 			}
 		case rdb.SetType:
 			setObj := o.(*rdb.SetObject)
