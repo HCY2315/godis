@@ -45,41 +45,44 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 		var entity *database.DataEntity
 		switch o.GetType() {
 		case rdb.StringType:
-			// String：RDB 的 StringObject.Value 是 []byte
+			// Redis STRING：RDB 解码器给出 StringObject.Value（[]byte）
+			// godis 直接把字节串存入 DataEntity.Data（Redis 字符串是二进制安全的）
 			str := o.(*rdb.StringObject)
 			entity = &database.DataEntity{
-				Data: str.Value, // 字符串值直接用 []byte
+				Data: str.Value,
 			}
 		case rdb.ListType:
-			// List：Values 是 [][]byte（按顺序）
+			// Redis LIST：RDB 还原成 [][]byte（按顺序）
+			// godis 用 QuickList（链表+分页切片）来表示列表
 			listObj := o.(*rdb.ListObject)
 			list := List.NewQuickList()
 			for _, v := range listObj.Values {
-				list.Add(v) // 每个元素作为 []byte 加入 quicklist
+				list.Add(v) // 每个元素是 []byte
 			}
 			entity = &database.DataEntity{
-				Data: list, // 内存结构：QuickList
+				Data: list,
 			}
 		case rdb.HashType:
-			// Hash：HashObject.Hash 是 map[string][]byte
+			// Redis HASH：RDB 给出 map[string][]byte
+			// godis 用 dict.MakeSimple() 构造内存字典（单线程恢复，不要并发）
 			hashObj := o.(*rdb.HashObject)
-			hash := dict.MakeSimple() // 简易字典（单线程恢复）
+			hash := dict.MakeSimple()
 			for k, v := range hashObj.Hash {
 				hash.Put(k, v)
 			}
 			entity = &database.DataEntity{
-				Data: hash, // 内存结构：dict.Dict
+				Data: hash,
 			}
 		case rdb.SetType:
-			// Set：SetObject.Members 是 [][]byte
+			// Redis SET：RDB 给出 Members [][]byte（去重）
+			// godis 的 Set 底层是 dict（key=成员，value 为空），所以转 string 存入
 			setObj := o.(*rdb.SetObject)
 			set := HashSet.Make()
 			for _, mem := range setObj.Members {
-				// 注意：Set 的成员在 RDB 里是 []byte，这里转成 string 存入 HashSet
 				set.Add(string(mem))
 			}
 			entity = &database.DataEntity{
-				Data: set, // 内存结构：HashSet（底层是 dict）
+				Data: set,
 			}
 		case rdb.ZSetType:
 			zsetObj := o.(*rdb.ZSetObject)
