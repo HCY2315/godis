@@ -9,21 +9,50 @@ import "container/list"
 const pageSize = 1024
 
 // QuickList —— 命名含义：快速列表，元素分批存在 page 里，page 之间用链表连接。
+// QuickList
+// size: 2050
+// data: 链表
+// ┌────────┐   ┌────────┐   ┌────────┐
+// │ 页0     │⇄  │ 页1     │⇄  │ 页2     │
+// │[0..1023]│  │[1024..   │  │[2048,   │
+// │cap=1024 │  │ 2047]    │  │ 2049]   │
+// │len=1024 │  │len=1024  │  │len=2    │
+// └────────┘   └────────┘   └────────┘
+// 节点Value    节点Value    节点Value
+
+// 逻辑上一维的下标空间 [0, size)，被切成若干页：第 i 个元素在哪一页、页内第几个，要靠遍历页来定位。
+//
+// 为什么这么设计（对比纯链表/纯数组）：
+//
+// 纯链表：每个元素一个节点，指针开销大、内存局部性差；
+// 纯大数组：头部插入/删除要整体搬移，代价高；
+// quicklist：页内是数组（局部性好、省指针），页间是链表（头尾插入便宜），取两者折中。
 type QuickList struct {
 	data *list.List // 元素是 []interface{}（每一页）
-	size int
+	size int        // 整个列表元素总数（不是页数）
 }
 
+// list 的使用备注
+// type List struct {
+//	root Element // 哨兵节点，本身不存数据；只用到 &root、root.prev、root.next
+//	len  int     // 真实元素个数（不含哨兵）
+//}
+//
+//type Element struct {
+//	next, prev *Element // 前后指针
+//	list *List          // 所属链表
+//	Value any           // 存的值（QuickList 里存 []interface{} 一页）
+//}
 // iterator of QuickList, move between [-1, ql.Len()]
 type iterator struct {
-	node   *list.Element
-	offset int
-	ql     *QuickList
+	node   *list.Element // 当前所在的那一页（外层链表节点）
+	offset int           // 页内下标（第几个元素）
+	ql     *QuickList    // 回指整个列表
 }
 
 func NewQuickList() *QuickList {
 	l := &QuickList{
-		data: list.New(),
+		data: list.New(), // 生成一个循环双向链表，
 	}
 	return l
 }
