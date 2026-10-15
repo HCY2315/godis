@@ -85,6 +85,9 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 				Data: set,
 			}
 		case rdb.ZSetType:
+			// Redis ZSET（有序集合）：每个成员带一个分数 score，按 score 排序
+			// RDB 给出 Entries，每项含 Member(string) + Score(float64)
+			// godis 的 SortedSet = dict(member->元素, O(1)查分) + skiplist(按分有序, 排名/范围查询)
 			zsetObj := o.(*rdb.ZSetObject)
 			zSet := SortedSet.Make()
 			for _, e := range zsetObj.Entries {
