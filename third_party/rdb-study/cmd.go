@@ -92,11 +92,12 @@ func (s *separators) Set(value string) error {
 //
 // 使用技巧：
 //   - json/memory/aof 必须提供 -o，因为对应 helper 会自行创建输出文件；
-//   - bigkey/prefix 的 -n 必须大于 0，未指定 -o 时 CSV 直接打印到标准输出；
+//   - bigkey 的 -n 必须大于 0；prefix 的 -n 省略或为 0 表示输出全部，负数非法；
+//   - bigkey/prefix 未指定 -o 时，CSV 直接打印到标准输出；
 //   - -regex 使用 Go regexp 语义（默认是“包含匹配”，需要整串匹配时用 ^...$）；
 //   - -no-expired 表示过滤掉已过期的 key，只保留未过期或没有 TTL 的 key；
 //   - -sep 可重复出现，用于火焰图按多个分隔符拆分 key；
-//   - 源文件路径必须是最后一个非 flag 参数（flagSet.Arg(0)）。
+//   - 源文件路径是第一个非 flag 位置参数（flagSet.Arg(0)），通常写在命令末尾。
 func main() {
 	flagSet := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	// cmd 对应 -c，子命令名：json/memory/aof/bigkey/prefix/flamegraph。
