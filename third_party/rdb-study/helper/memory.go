@@ -12,7 +12,16 @@ import (
 	"time"
 )
 
-// MemoryProfile read rdb file and analysis memory usage then write result to csv file
+// MemoryProfile 读取 rdb 文件，逐个统计每个 key 的内存占用，输出为 CSV 报告。
+//
+// 用法（命令行）：
+//
+//	rdb -c memory -o memory.csv dump.rdb
+//
+// 输出 CSV 列：database,key,type,size,size_readable,element_count,encoding,expiration
+//
+// 说明：size 是「估算值」，由 memprofiler 根据对象的编码方式（ziplist/listpack/intset 等）
+// 按 Redis 内部结构近似计算，用于找出内存大户，而非精确到字节。
 func MemoryProfile(rdbFilename string, csvFilename string, options ...interface{}) error {
 	if rdbFilename == "" {
 		return errors.New("src file path is required")
@@ -46,6 +55,7 @@ func MemoryProfile(rdbFilename string, csvFilename string, options ...interface{
 	}
 	csvWriter := csv.NewWriter(csvFile)
 	defer csvWriter.Flush()
+	// formatExpiration 把过期时间格式化成 RFC3339 字符串；无过期时间则输出空串
 	formatExpiration := func(o model.RedisObject) string {
 		expiration := o.GetExpiration()
 		if expiration == nil {
