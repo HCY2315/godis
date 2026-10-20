@@ -2,7 +2,7 @@
 //
 // 对应 RDB 类型常量（见 decoder.go）：
 //   - typeZset         (3)  score 以「字符串形式的浮点数」存储（旧格式）
-//   - typeZset2        (5)  score 以 8 字节 IEEE-754 二进制双精度存储（Redis 4+）
+//   - typeZset2        (5)  score 以 8 字节 IEEE-754 二进制双精度存储（较新版本）
 //   - typeZsetZipList  (12) ziplist：member/score 字符串成对排列
 //   - typeZsetListPack (17) listpack：member/score 字符串成对排列（Redis 7+）
 //
@@ -228,13 +228,12 @@ func (enc *Encoder) tryWriteZipListZSet(key string, entries []*model.ZSetEntry) 
 		return true, err
 	}
 	// ziplist 内 member/score 交替：展开成 [m0, s0, m1, s1, ...]
-	zlElements := make([]string, len(entries)*2)
-	for i, entry := range entries {
+	zlElements := make([]string, 0, len(entries)*2)
+	for _, entry := range entries {
 		// 'f' 表示不用指数形式，-1 表示保留能精确表示该值的最少小数位；
 		// 解析侧用 ParseFloat 读取，因此格式只需保证可逆。
 		scoreStr := strconv.FormatFloat(entry.Score, 'f', -1, 64)
-		zlElements[i*2] = entry.Member
-		zlElements[i*2+1] = scoreStr
+		zlElements = append(zlElements, entry.Member, scoreStr)
 	}
 	err = enc.writeZipList(zlElements)
 	if err != nil {

@@ -1,7 +1,7 @@
 // list.go 负责解析与生成 Redis 的 List（列表）类型。
 //
 // 对应 RDB 类型常量（见 decoder.go）：
-//   - typeList           (0)  普通列表：先用长度前缀给出元素个数，再逐个读取字符串元素
+//   - typeList           (1)  普通列表：先用长度前缀给出元素个数，再逐个读取字符串元素
 //   - typeListZipList    (10) 紧凑列表：整个列表被编码成一个 ziplist 字符串
 //   - typeListQuickList  (14) Quicklist：长度前缀 + 多个 ziplist 节点
 //   - typeListQuickList2 (18) Quicklist v2：长度前缀 + 多个节点，每个节点可以是

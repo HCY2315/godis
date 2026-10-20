@@ -376,4 +376,4 @@ func (enc *Encoder) tryWriteZipListHashMap(key string, hash map[string][]byte, o
 //  1. 三种紧凑编码在解析后都变成 map，业务代码无需关心原始编码；
 //  2. 如果要还原 Redis 的内存占用，请使用 detail.RawStringSize（编码后字节数），
 //     而不是 len(map)，后者只反映逻辑条目数；
-//  3. zipmap 是历史编码（Redis 2.6 之前），现代 RDB 一般只会遇到 ziplist/listpack。
+//  3. zipmap 是早期 Redis 的历史编码，现代 RDB 一般只会遇到 ziplist/listpack。
