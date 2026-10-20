@@ -16,12 +16,12 @@ import (
 //	root → "User:" → "1"
 //	                → "2"
 type radixNode struct {
-	path      string        // 本节点代表的字符串片段（相对父节点）
-	end       bool          // 是否有一个完整的 key 在此结束
-	children  []*radixNode  // 子节点
-	totalSize int           // 该前缀下所有 key 的内存大小之和（用于前缀聚合统计）
-	keyCount  int           // 该前缀下 key 的数量
-	fullpath  string        // 从根到本节点拼成的完整前缀（便于输出）
+	path      string       // 本节点代表的字符串片段（相对父节点）
+	end       bool         // 是否有一个完整的 key 在此结束
+	children  []*radixNode // 子节点
+	totalSize int          // 该前缀下所有 key 的内存大小之和（用于前缀聚合统计）
+	keyCount  int          // 该前缀下 key 的数量
+	fullpath  string       // 从根到本节点拼成的完整前缀（便于输出）
 }
 
 // radixTree 是基数树，只保留一个根节点。
