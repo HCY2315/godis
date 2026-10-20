@@ -8,14 +8,27 @@ import (
 	"strconv"
 )
 
+// crlf 是 RESP 协议的行结束符（Redis Serialization Protocol 规定用 \r\n）。
 const crlf = "\r\n"
 
 // CmdLine is alias for [][]byte, represents a command line
+//
+// 一条命令用 [][]byte 表示：第一个元素是命令名，后面依次是参数。
+// 例如 SET k v → [][]byte{[]byte("SET"), []byte("k"), []byte("v")}。
 type CmdLine = [][]byte
 
-// lexOrder traversal map in lex order to create
+// lexOrder 是一个「选项标记类型」，用于让 ObjectToCmd 对 hash 字段按字典序排序输出。
+// 用法：helper.ObjectToCmd(obj, lexOrder{}) —— 这样生成的结果可复现（map 默认无序）。
 type lexOrder struct{}
 
+// makeMultiBulkResp 把一条命令编码成 RESP 的「多批量回复」格式：
+//
+//	*<参数个数>\r\n
+//	$<参数1长度>\r\n<参数1>\r\n
+//	$<参数2长度>\r\n<参数2>\r\n
+//	...
+//
+// 其中 nil 参数编码为 $-1\r\n（表示空值）。Redis 客户端/服务端都用这种格式收发命令。
 func makeMultiBulkResp(args [][]byte) []byte {
 	argLen := len(args)
 	var buf bytes.Buffer
@@ -32,6 +45,7 @@ func makeMultiBulkResp(args [][]byte) []byte {
 
 var setCmd = []byte("SET")
 
+// stringToCmd 把 string 对象转成 SET 命令。
 func stringToCmd(obj *model.StringObject) CmdLine {
 	cmdLine := make([][]byte, 3)
 	cmdLine[0] = setCmd
@@ -42,6 +56,7 @@ func stringToCmd(obj *model.StringObject) CmdLine {
 
 var rPushAllCmd = []byte("RPUSH")
 
+// listToCmd 把 list 对象转成一条 RPUSH 命令（一次性把全部元素追加进去，保持顺序）。
 func listToCmd(obj *model.ListObject) CmdLine {
 	cmdLine := make([][]byte, 2+obj.GetElemCount())
 	cmdLine[0] = rPushAllCmd
@@ -54,6 +69,7 @@ func listToCmd(obj *model.ListObject) CmdLine {
 
 var sAddCmd = []byte("SADD")
 
+// setToCmd 把 set 对象转成一条 SADD 命令。
 func setToCmd(obj *model.SetObject) CmdLine {
 	cmdLine := make([][]byte, 2+obj.GetElemCount())
 	cmdLine[0] = sAddCmd
@@ -66,6 +82,8 @@ func setToCmd(obj *model.SetObject) CmdLine {
 
 var hMSetCmd = []byte("HMSET")
 
+// hashToCmd 把 hash 对象转成一条 HMSET 命令（field1 value1 field2 value2 ...）。
+// 若 useLexOrder 为 true，则先按 field 字典序排序，保证输出顺序稳定可复现。
 func hashToCmd(obj *model.HashObject, useLexOrder bool) CmdLine {
 	cmdLine := make([][]byte, 2+obj.GetElemCount()*2)
 	cmdLine[0] = hMSetCmd
@@ -98,6 +116,9 @@ func hashToCmd(obj *model.HashObject, useLexOrder bool) CmdLine {
 
 var zAddCmd = []byte("ZADD")
 
+// zSetToCmd 把 zset 对象转成一条 ZADD 命令（score1 member1 score2 member2 ...）。
+// 注意 score 用 strconv.FormatFloat(..., 'f', -1, 64) 格式化：'-1' 表示用最少的位数表示，
+// 避免出现 1.2000000000000002 这种多余的浮点误差尾巴。
 func zSetToCmd(obj *model.ZSetObject) CmdLine {
 	cmdLine := make([][]byte, 2+obj.GetElemCount()*2)
 	cmdLine[0] = zAddCmd
@@ -125,7 +146,15 @@ func makeExpireCmd(obj model.RedisObject) CmdLine {
 	return args
 }
 
-// ObjectToCmd convert redis object to redis command line
+// ObjectToCmd 把一个 Redis 对象转换成「重建它所需的命令列表」。
+//
+// 大多数对象只需 1 条命令；但带过期时间的对象会额外追加一条 PEXPIREAT 命令，
+// 所以返回值是 []CmdLine（命令的切片）。
+//
+// 支持的类型与命令对应关系：
+//
+//	string → SET      list → RPUSH    hash → HMSET
+//	set    → SADD     zset → ZADD     有 TTL → 追加 PEXPIREAT
 func ObjectToCmd(obj model.RedisObject, opts ...interface{}) []CmdLine {
 	if obj == nil {
 		return nil
@@ -161,7 +190,7 @@ func ObjectToCmd(obj model.RedisObject, opts ...interface{}) []CmdLine {
 	return cmdLines
 }
 
-// CmdLinesToResp convert []CmdLine to RESP bytes
+// CmdLinesToResp 把多条命令编码成连续的 RESP 字节流（可直接写入 AOF 文件）。
 func CmdLinesToResp(cmds []CmdLine) []byte {
 	buf := bytes.NewBuffer(make([]byte, 0))
 	for _, cmdLine := range cmds {
@@ -171,7 +200,10 @@ func CmdLinesToResp(cmds []CmdLine) []byte {
 	return buf.Bytes()
 }
 
-// WriteObjectToResp convert object to resp and write
+// WriteObjectToResp 把对象对应的命令以 RESP 格式写入 w。
+//
+// 与 CmdLinesToResp 的区别：这里是「边拼边写」，对每个参数分段 Write，
+// 避免把很大的 key/value 一次性复制进一个大 buffer，内存更省。
 func WriteObjectToResp(w io.Writer, obj model.RedisObject) error {
 	var err error
 	cmdLines := ObjectToCmd(obj)

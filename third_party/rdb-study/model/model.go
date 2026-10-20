@@ -1,3 +1,13 @@
+// Package model 定义了 rdb 解析结果的「统一数据模型」。
+//
+// 无论 RDB 文件里用的是哪种底层编码（普通数组、ziplist、listpack、quicklist、intset……），
+// 解析后都会被还原成这里的几种对象：StringObject / ListObject / SetObject / HashObject /
+// ZSetObject / StreamObject 等。调用方只面向这些对象编程，无需关心底层编码差异。
+//
+// 两个容易混淆的概念：
+//   - Type    ：Redis 的「逻辑类型」，即用户看到的 string/list/set/hash/zset/stream；
+//   - Encoding：底层的「物理编码」，如 ziplist/listpack/quicklist2/intset 等。
+//     同一个 Type 可能对应多种 Encoding（例如 list 可能是 quicklist、ziplist 或普通 list）。
 package model
 
 import (
@@ -5,6 +15,7 @@ import (
 	"time"
 )
 
+// 逻辑类型常量：对应 Redis 对外暴露的数据类型（命令里的类型）。
 const (
 	// StringType is redis string
 	StringType = "string"
@@ -24,6 +35,8 @@ const (
 	StreamType = "stream"
 )
 
+// 物理编码常量：对应数据在 RDB 文件/内存中的实际存储方式（Redis 的 encoding 字段）。
+// 了解它们有助于理解「为什么同样 100 个元素，内存占用差别很大」。
 const (
 	// StringEncoding for string
 	StringEncoding = "string"
@@ -51,10 +64,26 @@ const (
 	QuickList2Encoding = "quicklist2"
 )
 
-// CallbackFunc process redis object
+// CallbackFunc 是解析回调：每解析出一个对象就调用一次。
+// 返回 true 表示继续解析下一个对象，返回 false 表示停止解析（提前退出）。
+//
+// 用法：
+//
+//	dec.Parse(func(obj model.RedisObject) bool {
+//	    fmt.Println(obj.GetKey())
+//	    return true
+//	})
 type CallbackFunc func(object RedisObject) bool
 
-// RedisObject is interface for a redis object
+// RedisObject 是所有 Redis 对象的公共接口。
+// 通过它可以用统一的方式获取对象的元信息，再用类型断言取具体数据。
+//
+// 用法示例：
+//
+//	switch o := obj.(type) {
+//	case *model.StringObject: fmt.Println(o.Value)
+//	case *model.ListObject:   fmt.Println(o.Values)
+//	}
 type RedisObject interface {
 	// GetType returns redis type of object: string/list/set/hash/zset
 	GetType() string
@@ -72,7 +101,8 @@ type RedisObject interface {
 	GetEncoding() string
 }
 
-// BaseObject is basement of redis object
+// BaseObject 是所有具体对象（String/List/Set/Hash/ZSet...）的「公共基底」，
+// 通过结构体嵌入(*BaseObject)被复用，从而统一提供 DB/Key/过期时间/大小 等元信息。
 type BaseObject struct {
 	DB         int         `json:"db"`                   // DB is db index of redis object
 	Key        string      `json:"key"`                  // Key is key of redis object
@@ -114,6 +144,9 @@ func (o *BaseObject) GetElemCount() int {
 }
 
 // StringObject stores a string object
+//
+// Value 用 []byte 而非 string：Redis 的字符串是「二进制安全」的，
+// 可以存任意字节（图片、序列化数据等），用 []byte 才不会丢失信息。
 type StringObject struct {
 	*BaseObject
 	Value []byte
@@ -124,7 +157,11 @@ func (o *StringObject) GetType() string {
 	return StringType
 }
 
-// MarshalJSON marshal []byte as string
+// MarshalJSON 自定义 JSON 序列化。
+//
+// 为什么要自定义？Go 默认把 []byte 序列化成 base64 字符串，
+// 那样输出的可读性很差；这里改成把字节直接当字符串输出，便于人阅读。
+// 注意：其它对象的 MarshalJSON 都是同一套路（把 []byte 转成 string/map）。
 func (o *StringObject) MarshalJSON() ([]byte, error) {
 	o2 := struct {
 		*BaseObject
@@ -137,6 +174,8 @@ func (o *StringObject) MarshalJSON() ([]byte, error) {
 }
 
 // ListObject stores a list object
+//
+// Values 按顺序保存列表元素（Redis 的 list 是有序的，类似双向链表/数组）。
 type ListObject struct {
 	*BaseObject
 	Values [][]byte
@@ -169,6 +208,9 @@ func (o *ListObject) MarshalJSON() ([]byte, error) {
 }
 
 // HashObject stores a hash object
+//
+// Hash 是「字段名 → 值」的映射（Redis hash 常用于存对象，如 user:1 的 name/age）。
+// 注意：map 无序，遍历顺序不固定。
 type HashObject struct {
 	*BaseObject
 	Hash map[string][]byte
@@ -201,6 +243,8 @@ func (o *HashObject) MarshalJSON() ([]byte, error) {
 }
 
 // SetObject stores a set object
+//
+// Members 是无序去重的成员集合（Redis set 保证成员唯一）。
 type SetObject struct {
 	*BaseObject
 	Members [][]byte
@@ -233,12 +277,16 @@ func (o *SetObject) MarshalJSON() ([]byte, error) {
 }
 
 // ZSetEntry is a key-score in sorted set
+//
+// Member 是成员，Score 是排序分值。ZSet 按 Score 升序排列，Score 相同则按 Member 字典序。
 type ZSetEntry struct {
 	Member string  `json:"member"`
 	Score  float64 `json:"score"`
 }
 
 // ZSetObject stores a sorted set object
+//
+// Entries 是有序集合成员及其分值（Redis zset = 跳表 + 字典，支持按分值范围查询）。
 type ZSetObject struct {
 	*BaseObject
 	Entries []*ZSetEntry `json:"entries"`
@@ -255,6 +303,8 @@ func (o *ZSetObject) GetElemCount() int {
 }
 
 // AuxObject stores redis metadata
+//
+// 例如 Key="redis-ver"、Value="7.0.0"。只有在 Decoder 开启 WithSpecialOpCode 时才会回调出来。
 type AuxObject struct {
 	*BaseObject
 	Value string
@@ -278,6 +328,9 @@ func (o *AuxObject) MarshalJSON() ([]byte, error) {
 }
 
 // DBSizeObject stores db size metadata
+//
+// 对应 RDB 的 RESIZEDB 操作码：告知该 db 的 key 总数与带过期时间的 key 数（仅提示信息）。
+// 仅在 Decoder 开启 WithSpecialOpCode 时回调。
 type DBSizeObject struct {
 	*BaseObject
 	KeyCount uint64
@@ -290,6 +343,9 @@ func (o *DBSizeObject) GetType() string {
 }
 
 // ModuleTypeObject stores a module type object parsed by custom handler
+//
+// Redis Module（如 RedisJSON）写入的数据格式由模块自定义，rdb 库无法内置解析，
+// 需要调用方通过 Decoder.WithSpecialType 注册 handler，解析结果就放在 Value 里。
 type ModuleTypeObject struct {
 	*BaseObject
 	ModuleType string
