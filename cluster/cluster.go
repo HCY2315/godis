@@ -2,7 +2,7 @@
  * 集群入口。
  * 特点：这是一个“服务端集群”，对客户端透明——连任意节点都能访问全集群的数据。
  * 阶段定位：集群模式下的启动阶段（main.go 里 cluster-enable 打开时走这里）。
- * 组成：底层的分布式一致由 raft 提供；数据按 16384 个 slot 分片；节点间用内部命令通信。
+ * 组成：底层的分布式一致由 raft 提供（只复制元数据，不复制用户数据）；数据按 1024 个 slot 分片（见 core/utils.go 的 SlotCount，注意 Redis 官方是 16384）；节点间用内部命令通信。
  * 命名说明：Cluster 是 core.Cluster 的别名，MakeCluster 是构造+启动函数。
  */
 package cluster
