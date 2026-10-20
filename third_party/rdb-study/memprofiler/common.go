@@ -1,3 +1,12 @@
+// Package memprofiler 估算 Redis 对象在内存中的占用大小。
+//
+// 估算口径尽量贴近 64 位 Redis + jemalloc 分配器的实际情况：
+//   - 字符串按 SDS 头部 + 内容 + 结尾 '\0' 计算，并向上取整到 jemalloc 的 size class；
+//   - 哈希表、跳表、quicklist、ziplist/listpack、rax 树等结构按其源码中的字段估算；
+//   - 顶层 key 还要额外计算数据库字典项、redisObject、过期字典等开销。
+//
+// 这些数字是“估算值”而非精确值，适合做内存分析、找出大 key 或按前缀统计内存，
+// 不保证与 INFO memory 完全一致。
 package memprofiler
 
 import (
@@ -6,6 +15,11 @@ import (
 	"unsafe"
 )
 
+// jemallocClasses 是 jemalloc 的 size class 列表（单位：字节）。
+//
+// jemalloc 不会严格按照请求大小分配内存，而是把请求向上归入某个 size class。
+// 例如请求 10 字节，实际会占用 16 字节；请求 65 字节，实际会占用 80 字节。
+// 列表从 8 字节开始，按 jemalloc 的间距规则递增，最大到 8EiB 左右。
 var jemallocClasses = []int{
 	8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 640, 768, 896, 1024,
 	1280, 1536, 1792, 2048, 2560, 3072, 3584, 4096, 5120, 6144, 7168, 8192, 10240, 12288, 14336, 16384, 20480, 24576,
@@ -37,6 +51,10 @@ var jemallocClasses = []int{
 	8070450532247928832,
 }
 
+// getJemallocSize 返回不小于 req 的最小 jemalloc size class。
+//
+// 用二分查找在升序的 jemallocClasses 中找到第一个 >= req 的元素，
+// 模拟 jemalloc “按 size class 分配”的行为。调用方传入的 req 应大于 0。
 func getJemallocSize(req int) int {
 	i := sort.Search(len(jemallocClasses), func(i int) bool {
 		return jemallocClasses[i] >= req
@@ -44,6 +62,18 @@ func getJemallocSize(req int) int {
 	return jemallocClasses[i]
 }
 
+// sizeOfString 估算一个 Redis 字符串（SDS）占用的内存。
+//
+// 公式：SDS 头部 + 字符串内容 + 结尾 '\0'，最后向上取整到 jemalloc size class。
+// SDS 头部大小取决于字符串长度，Redis 会根据长度选择不同的 sdshdr 类型：
+//   - len < 32：sdshdr5，1 字节 flags，无单独的 len/alloc 字段；
+//   - len < 256：sdshdr8，len/alloc 各 1 字节，共 2 字节；
+//   - len < 25536：16 位长度头，len/alloc 共 4 字节，另有 1 字节 flags；
+//   - len < 2^32：32 位长度头，len/alloc 共 8 字节，另有 1 字节 flags；
+//   - 更大：64 位长度头，len/alloc 共 16 字节，另有 1 字节 flags。
+//
+// 另外，Redis 会共享 0~9999 的整数字符串（REDIS_SHARED_INTEGERS），
+// 因此这里对能被 ParseInt 解析的字符串直接返回 0，表示不额外占用内存。
 func sizeOfString(str string) int {
 	// https://github.com/antirez/redis/blob/unstable/src/sds.h
 	_, err := strconv.ParseInt(str, 10, 64)
@@ -53,33 +83,56 @@ func sizeOfString(str string) int {
 	}
 	size := len(str)
 	if size < 32 { // 2^5
+		// sdshdr5：1 字节 flags + 1 字节结尾 '\0'
 		return getJemallocSize(size + 1 + 1)
 	} else if size < 256 { // 2^8
+		// sdshdr8：len + alloc 共 2 字节 + 1 字节结尾 '\0'
 		return getJemallocSize(size + 2 + 1)
 	} else if size < 25536 { // 2^16
+		// sdshdr16：1 字节 flags + len/alloc 共 4 字节 + 1 字节结尾 '\0'
 		return getJemallocSize(size + 1 + 4 + 1)
 	} else if size < 4294967296 { // 2^32
+		// sdshdr32：1 字节 flags + len/alloc 共 8 字节 + 1 字节结尾 '\0'
 		return getJemallocSize(size + 1 + 8 + 1)
 	}
+	// sdshdr64：1 字节 flags + len/alloc 共 16 字节 + 1 字节结尾 '\0'
 	return getJemallocSize(size + 1 + 16 + 1)
 }
 
+// sizeOfPointer 返回一个指针的大小。Redis 通常是 64 位程序，指针为 8 字节。
 func sizeOfPointer() int {
 	return 8
 }
 
+// sizeOfLong 返回一个 unsigned long 的大小。64 位平台上为 8 字节。
 func sizeOfLong() int {
 	return 8
 }
 
+// unsafeBytes2Str 零拷贝地把 []byte 转成 string。
+//
+// 正常转换 []byte -> string 会复制一份数据；这里通过 unsafe 直接复用底层数组，
+// 仅用于只读的估算场景（不会修改字符串内容），避免为内存分析额外分配大量内存。
+// 注意：调用方必须保证在字符串使用期间 b 不会被修改或回收。
 func unsafeBytes2Str(b []byte) string {
 	return *(*string)(unsafe.Pointer(&b))
 }
 
+// redisObjOverhead 返回 redisObject 结构体的估算开销。
+//
+// robj 中保存 type、encoding、lru 等元数据，再加一个指向实际数据的指针，
+// 这里按“1 个指针 + 8 字节元数据”估算，共 16 字节。
 func redisObjOverhead() int {
 	return sizeOfPointer() + 8
 }
 
+// topLevelObjectOverhead 返回一个顶层 key 在数据库中的固定开销。
+//
+// 组成：
+//   - 数据库主字典中的一个 dictEntry；
+//   - key 本身的 SDS 内存；
+//   - 指向 value 的 redisObject；
+//   - 如果 key 设置了过期时间，还要加上过期字典中的 dictEntry 和 8 字节时间戳。
 func topLevelObjectOverhead(key string, hasTTl bool) int {
 	size := hashTableEntryOverhead() + sizeOfString(key) + redisObjOverhead()
 	if !hasTTl {
@@ -88,12 +141,20 @@ func topLevelObjectOverhead(key string, hasTTl bool) int {
 	return size + expiryOverhead()
 }
 
+// expiryOverhead 返回设置过期时间所需的额外内存。
 func expiryOverhead() int {
 	// Key expiry is stored in a hashtable, so we have to pay for the cost of a hashtable entry
 	// The timestamp itself is stored as an int64, which is a 8 bytes
+	//
+	// 过期时间保存在 expires 字典中：一个 dictEntry 的开销，
+	// 加上一个 int64 毫秒时间戳（8 字节）。
 	return hashTableEntryOverhead() + 8
 }
 
+// nextPower 返回严格大于 size 的最小 2 的幂。
+//
+// 例如 size=0 返回 1，size=1 返回 2，size=4 返回 8。
+// Redis 的哈希表桶数组长度总是 2 的幂，这里用于估算桶数组的容量。
 func nextPower(size int) int {
 	power := 1
 	for power <= size {
