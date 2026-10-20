@@ -48,36 +48,53 @@ var errInvalidByteQuantity = errors.New("byte quantity must be a positive intege
 //	B: Byte
 //
 // The unit that results in the smallest number greater than or equal to 1 is always chosen.
+//
+// 中文说明：把字节数格式化为便于阅读的字符串，例如 1024 -> "1K"、1536 -> "1.5K"。
+// 单位从大到小依次尝试，选择能让结果不小于 1 的最小单位；
+// 最终最多保留 1 位小数，并且会去掉多余的 ".0"（如 "1.0K" 变成 "1K"）。
+// 注意：0 字节是特例，直接返回 "0"（不带单位）。
 func FormatSize(bytes uint64) string {
 	unit := ""
+	// 先转换为 float64，便于后续除以 1024 的幂并保留小数部分。
 	value := float64(bytes)
 
+	// 从最大的单位开始向下比较，命中后立即用对应幂次做除法。
 	switch {
 	case bytes >= sizeExa:
+		// 1E = 1024^6 字节
 		unit = "E"
 		value = value / sizeExa
 	case bytes >= sizePeta:
+		// 1P = 1024^5 字节
 		unit = "P"
 		value = value / sizePeta
 	case bytes >= sizeTera:
+		// 1T = 1024^4 字节
 		unit = "T"
 		value = value / sizeTera
 	case bytes >= sizeGiga:
+		// 1G = 1024^3 字节
 		unit = "G"
 		value = value / sizeGiga
 	case bytes >= sizeMega:
+		// 1M = 1024^2 字节
 		unit = "M"
 		value = value / sizeMega
 	case bytes >= sizeKilo:
+		// 1K = 1024 字节
 		unit = "K"
 		value = value / sizeKilo
 	case bytes >= sizeByte:
+		// 不足 1K，直接以字节为单位。
 		unit = "B"
 	case bytes == 0:
+		// 0 字节没有合适的单位，按惯例只返回 "0"。
 		return "0"
 	}
 
+	// 'f' 表示定点格式，精度 1 表示四舍五入到 1 位小数（不是向上取整）。
 	result := strconv.FormatFloat(value, 'f', 1, 64)
+	// 整数结果会带 ".0" 后缀，去掉它以保持简洁。
 	result = strings.TrimSuffix(result, ".0")
 	return result + unit
 }
