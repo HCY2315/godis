@@ -1,3 +1,10 @@
+// 本文件用 Go 的 embed 机制，把火焰图页面所需的 JS/CSS 静态资源
+// 直接编译进二进制（无需运行时读文件、也不依赖外网 CDN）：
+//   - d3Css / d3Js            : d3.js 及其样式
+//   - d3FlameGraphJs          : d3-flame-graph 插件
+//   - d3TipJs                 : 悬浮提示插件
+//   - bootstrapCSS            : Bootstrap 样式
+//   - html                    : 页面模板（由 web.go 用 html/template 渲染）
 package d3flame
 
 import (
