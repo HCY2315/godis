@@ -136,7 +136,7 @@ func sizeOfQuicklist(detail *model.QuicklistDetail) int {
 // quicklist2 的节点有两种容器类型：
 //   - plain：节点直接保存一个字符串，按 SDS 估算；
 //   - listpack：节点保存 listpack，需要 listpack 头（4 字节总长 + 2 字节元素数
-//     + 1 字节结束标记）加上每个 entry 的大小。
+//   - 1 字节结束标记）加上每个 entry 的大小。
 //
 // detail.NodeEncodings 记录每个节点的容器类型，
 // detail.ListPackEntrySize 记录对应节点内每个 entry 的字节数。
